@@ -37,21 +37,22 @@ class SessionDeath(Exception):
 class Session(socketserver.BaseRequestHandler):
     def setup(self):
         self.socket = self.request
-        self.transfer_buffer = b""
+        self.transfer_buffer = bytearray()
         self.lock = RLock()
         self.user = None
 
-    def readstring(self):
+    def _readstring(self):
         "Not thread-safe."
-        parted = (self.transfer_buffer, b"", b"")
-        while len(parted[1]) == 0:
-            chunk = socket.recv(4096)
+        terminator = self.transfer_buffer.find(0)
+        while terminator < 0:
+            chunk = self.socket.recv(CHUNK_SIZE)
             if not chunk:
-                raise SessionDeath
-            transfer_buffer += chunk
-            parted = transfer_buffer.partition(b"\0")
-        transfer_buffer = parted[2]
-        return parted[0].decode("utf-8")
+                raise Disconnect
+            self.transfer_buffer.extend(chunk)
+            terminator = transfer_buffer.find(0)
+        result = transfer_buffer[:terminator]
+        del transfer_buffer[:terminator + 1]
+        return result
 
     def send(self, message):
         "Thread-safe."
@@ -62,11 +63,11 @@ class Session(socketserver.BaseRequestHandler):
 
     def associate(self) -> User:
         try:
-            command, username = readstring().split()
+            command, username = self._readstring().split()
         except ValueError as e:
             raise ProtocolException("Must LOGIN or REGISTER with username to begin session: " + e.args[0])
 
-        password = readstring()
+        password = self._readstring()
 
         if command == "REGISTER":
             with users_lock:
@@ -88,7 +89,7 @@ class Session(socketserver.BaseRequestHandler):
             raise ProtocolException("Must LOGIN or REGISTER to begin session.")
 
     def list_users(self):
-        self.send("ADMIN\n"
+        self.send("LISTING\n"
                   + "\n".join(username
                               + (" (online)"
                                  if user.session is not None
@@ -98,17 +99,17 @@ class Session(socketserver.BaseRequestHandler):
     def delete(self):
         with users_lock:
             del users[self.user.username]
-            self.send("SUCCESS Account deleted; you are being disconnected.")
-            raise SessionDeath
+            self.send("DELETED Account deleted; you are being disconnected.")
+            raise Disconnect
 
-    def message(self, to, message):
+    def message(self, to, text):
         try:
             recipient = users[to]
         except KeyError:
             raise ProtocolException(f"{to} is not a user; try LIST to see available users.")
         recipient.send("MESSAGE " + self.user.username + "\n"
                        + "Sent: " + datetime.now(timezone.utc).isoformat() + "\n"
-                       + message)
+                       + text)
         self.send("SENT")
 
     def handle(self):
@@ -127,7 +128,7 @@ class Session(socketserver.BaseRequestHandler):
                 pass
         try:
             while True:
-                command = readstring()
+                command = self._readstring()
                 if command == "LIST":
                     self.list_users()
                 elif command == "DELETE":
@@ -135,6 +136,7 @@ class Session(socketserver.BaseRequestHandler):
                 elif command.startswith("MESSAGE"):
                     try:
                         _, to, message = command.split(maxsplit=2)
+                        self.message(to, message)
                     except ValueError as e:
                         self.send(ProtocolException("Incorrect message format: " + e.args[0]))
                     except ProtocolException as e:

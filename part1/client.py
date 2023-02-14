@@ -48,8 +48,8 @@ class Session:
     async def listen(self, event):
         return await self._queue(event).get()
 
-    async def list_users(self):
-        await self._send("LIST")
+    async def list_users(self, pattern="*"):
+        await self._send(f"LIST {pattern}")
         return await response.listen("LISTING")
 
     async def delete(self):

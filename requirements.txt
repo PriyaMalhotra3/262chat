@@ -1,2 +1,4 @@
 customtkinter==5.1.2
 darkdetect==0.8.0
+grpcio
+grpcio-tools

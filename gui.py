@@ -3,8 +3,10 @@ from customtkinter import *
 from part1.client import *
 
 class Chat(CTkToplevel):
-    def __init__(self):
+    def __init__(self, session: Session):
         super().__init__()
+
+        
 
 class App(CTk):
     def __init__(self):
@@ -30,58 +32,53 @@ class App(CTk):
         server_frame = CTkFrame(self)
         server_frame.pack(fill=X)
         CTkLabel(server_frame, "Server: ").pack(side=LEFT)
-        self.host = CTkEntry(
+        host = CTkEntry(
             server_frame,
             placeholder_text="Host"
         ).pack(side=LEFT, fill=BOTH, expand=True)
-        self.port = CTkEntry(
+        port = CTkEntry(
             server_frame,
             placeholder_text="Port"
         ).pack(side=LEFT, fill=BOTH, expand=True)
 
-        self.tabview = CTkTabview(self)
-        self.tabview.pack(fill=BOTH, expand=True)
-        tabs = [
-            self.tabview.add("Register"),
-            self.tabview.add("Login")
-        ]
-        for tab in tabs:
+        tabview = CTkTabview(self)
+        tabview.pack(fill=BOTH, expand=True)
+        for tabname in ["Register", "Login"]:
+            tab = tabview.add(tabname)
             tab.grid_columnconfigure(1, weight=1)
 
             CTkLabel(tab, "Username: ").grid(row=0,column=0)
-            username = StringVar()
-            CTkEntry(tab, textvariable=username).grid(row=0, column=1)
+            username = CTkEntry(tab, textvariable=username)
+            username.grid(row=0, column=1)
             CTkLabel(tab, "Password: ").grid(row=1,column=0)
-            password = StringVar()
-            CTkEntry(tab, textvariable=password, show="•").grid(row=0, column=1)
+            password = CTkEntry(tab, textvariable=password, show="•")
+            password.grid(row=0, column=1)
+            button = CTkButton(tab, "Connect").grid(row=0, column=0, columnspan=2)
 
-            CTkButton(
-                tab,
-                "Start",
-                command=lambda: self.initiate(username.get(), password.get())
-            ).grid(
-                row=0, column=0,
-                columnspan=2
-            )
+            async def connect():
+                button.configure(state="disabled")
+                tabview.configure(state="disabled")
+                try:
+                    session = await Session.connect(host.get(), int(port.get()))
+                    if tabname == "Register":
+                        endpoint = session.register
+                    else:
+                        endpoint = session.login
+                    await endpoint(username.get(), password.get())
+                    self.withdraw()
+                    Chat(session)
+                except (ValueError, ChatException) as e:
+                    messagedialog.showerror("Error", e.args[0])
+                    tabview.configure(state="enabled")
+                    button.configure(state="enabled")
+            button.configure(command=lambda: asyncio.create_task(connect()))
 
-    def initiate(self, username, password):
-        async def conect(create=False):
-            session = await Session.connect(self.host.get(), int(self.port.get()))
-            if create:
-                await session.register(username)
-            else:
-                await session.login(password)
-        
-        if self.tabview.get() == "Register":
-            
-        else:
-        Chat()
-        self.withdraw()
+    def mainloop(self):
+        async def loop():
+            while True:
+                app.update()
+                await asyncio.sleep(0.1)
+        asyncio.run(loop())
 
-async def main():
-    app = App()
-    while True:
-        app.update()
-        await asyncio.sleep(0.1)
-        
-asyncio.run(main())
+app = App()
+app.mainloop()

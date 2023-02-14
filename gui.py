@@ -1,5 +1,6 @@
 from customtkinter import *
 from tkinter import messagebox
+import traceback
 
 from part1.client import *
 
@@ -70,8 +71,9 @@ class App(CTk):
             padx=10
         )
 
-        username = StringVar()
-        password = StringVar()
+        self.username = StringVar()
+        self.password = StringVar()
+
         self.tabview = CTkTabview(master=self)
         self.tabview.pack(
             fill=BOTH,
@@ -94,7 +96,7 @@ class App(CTk):
             )
             CTkEntry(
                 master=tab,
-                textvariable=username
+                textvariable=self.username
             ).grid(
                 row=0,
                 column=1,
@@ -113,7 +115,7 @@ class App(CTk):
             CTkEntry(
                 master=tab,
                 show="•",
-                textvariable=password
+                textvariable=self.password
             ).grid(
                 row=1,
                 column=1,
@@ -150,10 +152,11 @@ class App(CTk):
                 endpoint = session.register
             else:
                 endpoint = session.login
-            await endpoint(username, password)
+            await endpoint(self.username.get(), self.password.get())
             self.withdraw()
             Chat(session)
         except Exception as e:
+            print(traceback.format_exc())
             messagebox.showerror("Error", str(e))
             self.tabview.configure(state="normal")
             source.configure(state="normal")

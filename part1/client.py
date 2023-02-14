@@ -4,7 +4,7 @@ class ChatException(Exception):
     pass
 
 class Session:
-    def __init__(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self._reader = reader
         self._writer = writer
         self._queues = {}
@@ -40,10 +40,10 @@ class Session:
         asyncio.create_task(self._consume())
 
     async def register(self, username, password):
-        self._initiate("REGISTER", username, password)
+        await self._initiate("REGISTER", username, password)
 
     async def login(self, username, password):
-        self._initiate("LOGIN", username, password)
+        await self._initiate("LOGIN", username, password)
 
     async def listen(self, event):
         return await self._queue(event).get()

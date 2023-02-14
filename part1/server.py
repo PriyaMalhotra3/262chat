@@ -3,18 +3,19 @@ import socketserver
 from datetime import datetime, timezone
 from threading import Lock, RLock
 from queue import Queue, SimpleQueue, Empty
+import fnmatch
 
 CHUNK_SIZE = 4096
 
 class User:
-    def __init__(username: str, password: str, session):
+    def __init__(self, username: str, password: str, session):
         self.username = username
         self.password = password
         self.session = session
         self.queue = SimpleQueue()
         self.lock = Lock()
         # Automatically acquire the lock on this user upon initialization.
-        lock.acquire()
+        self.lock.acquire()
 
     def send(self, message):
         try:
@@ -47,19 +48,21 @@ class Session(socketserver.BaseRequestHandler):
         while terminator < 0:
             chunk = self.socket.recv(CHUNK_SIZE)
             if not chunk:
-                raise Disconnect
+                raise SessionDeath
             self.transfer_buffer.extend(chunk)
-            terminator = transfer_buffer.find(0)
-        result = transfer_buffer[:terminator]
-        del transfer_buffer[:terminator + 1]
+            terminator = self.transfer_buffer.find(0)
+        result = self.transfer_buffer[:terminator].decode("utf-8")
+        del self.transfer_buffer[:terminator + 1]
+        print(result) # For debugging.
         return result
 
     def send(self, message):
         "Thread-safe."
-        if "\0" in message:
+        encoded = str(message).encode("utf-8")
+        if b"\0" in encoded:
             raise ValueError("Message cannot contain premature null bytes.")
-        with lock:
-            self.socket.sendall(str(message).encode("utf-8") + b"\0")
+        with self.lock:
+            self.socket.sendall(encoded + b"\0")
 
     def associate(self) -> User:
         try:
@@ -88,19 +91,19 @@ class Session(socketserver.BaseRequestHandler):
         else:
             raise ProtocolException("Must LOGIN or REGISTER to begin session.")
 
-    def list_users(self):
+    def list_users(self, pattern="*"):
         self.send("LISTING\n"
                   + "\n".join(username
                               + (" (online)"
-                                 if user.session is not None
+                                 if users[username].session is not None
                                  else "")
-                              for username, user in users))
+                              for username in fnmatch.filter(users, pattern)))
 
     def delete(self):
         with users_lock:
             del users[self.user.username]
             self.send("DELETED Account deleted; you are being disconnected.")
-            raise Disconnect
+            raise SessionDeath
 
     def message(self, to, text):
         try:
@@ -147,8 +150,9 @@ class Session(socketserver.BaseRequestHandler):
             pass
 
     def finish(self):
-        self.user.session = None
-        self.user.lock.release()
+        if self.user is not None:
+            self.user.session = None
+            self.user.lock.release()
 
 def serve(address: tuple[str, int]):
     with socketserver.ThreadingTCPServer(address, Session) as server:

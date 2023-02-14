@@ -1,5 +1,5 @@
-from tkinter import TclError, messagebox
 from customtkinter import *
+from tkinter import messagebox
 
 from part1.client import *
 
@@ -154,19 +154,15 @@ class App(CTk):
             self.withdraw()
             Chat(session)
         except Exception as e:
-            print(e)
             messagebox.showerror("Error", str(e))
-            source.configure(state="normal")
             self.tabview.configure(state="normal")
+            source.configure(state="normal")
 
     def mainloop(self):
         async def loop():
-            try:
-                while not self.destroyed:
-                    self.update()
-                    await asyncio.sleep(0.01)
-            except TclError:
-                pass
+            while not self.destroyed:
+                self.update()
+                await asyncio.sleep(0.01)
         asyncio.run(loop())
 
     def destroy(self):

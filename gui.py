@@ -2,11 +2,14 @@
 
 from customtkinter import *
 from tkinter import messagebox
+import asyncio
 import sys
 from os import path
 import traceback
 
 from interface import Message, AbstractSession
+from part1.client import Session as Part1Session
+from part2.client import Session as Part2Session
 
 set_appearance_mode("dark")
 
@@ -150,6 +153,14 @@ class App(CTk):
             expand=True,
             padx=10
         )
+        self.part2 = CTkSwitch(
+            master=server_frame,
+            text="gRPC"
+        )
+        self.part2.pack(
+            side=LEFT,
+            padx=(10, 0)
+        )
 
         self.username = StringVar()
         self.password = StringVar()
@@ -167,7 +178,7 @@ class App(CTk):
 
             CTkLabel(
                 master=tab,
-                text="Username☑:"
+                text="Username:"
             ).grid(
                 row=0,
                 column=0,
@@ -227,7 +238,11 @@ class App(CTk):
                 port = int(self.port.get())
             except ValueError:
                 raise ValueError("Port must be an integer.")
-            session = await Session.connect(self.host.get(), port)
+            if self.part2.get() == 1:
+                implementation = Part2Session
+            else:
+                implementation = Part1Session
+            session = await implementation.connect(self.host.get(), port)
             if self.tabview.get() == "Register":
                 endpoint = session.register
             else:

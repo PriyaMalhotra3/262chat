@@ -15,7 +15,7 @@ class Session(AbstractSession):
     async def connect(cls, host, port):
         cls(grpc.aio.insecure_channel(f"{host}:{port}"))
 
-    async def _initiate(self, create=False, username, password):
+    async def _initiate(self, create, username, password):
         self.auth = chat_pb2.Authentication(
             username=username,
             password=password
@@ -47,7 +47,7 @@ class Session(AbstractSession):
                 payload=chat_pb2.Payload(
                     to=message.to,
                     text=message.text
-                )
+                ),
                 user=self.auth
             )
         ))

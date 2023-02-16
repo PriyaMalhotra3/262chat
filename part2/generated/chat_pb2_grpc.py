@@ -3,6 +3,7 @@
 import grpc
 
 import chat_pb2 as chat__pb2
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
 class ChatStub(object):
@@ -14,34 +15,24 @@ class ChatStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.CreateAccount = channel.unary_unary(
-                '/Chat/CreateAccount',
-                request_serializer=chat__pb2.CreateAccountRequest.SerializeToString,
-                response_deserializer=chat__pb2.Response.FromString,
-                )
-        self.DeleteAccount = channel.unary_unary(
-                '/Chat/DeleteAccount',
-                request_serializer=chat__pb2.DeleteAccountRequest.SerializeToString,
-                response_deserializer=chat__pb2.Response.FromString,
-                )
-        self.Login = channel.unary_unary(
-                '/Chat/Login',
-                request_serializer=chat__pb2.LoginRequest.SerializeToString,
-                response_deserializer=chat__pb2.Response.FromString,
+        self.Initiate = channel.unary_stream(
+                '/Chat/Initiate',
+                request_serializer=chat__pb2.InitialRequest.SerializeToString,
+                response_deserializer=chat__pb2.Message.FromString,
                 )
         self.SendMessage = channel.unary_unary(
                 '/Chat/SendMessage',
                 request_serializer=chat__pb2.Message.SerializeToString,
-                response_deserializer=chat__pb2.Response.FromString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
-        self.ReceiveMessages = channel.unary_stream(
-                '/Chat/ReceiveMessages',
-                request_serializer=chat__pb2.Empty.SerializeToString,
-                response_deserializer=chat__pb2.Message.FromString,
+        self.DeleteAccount = channel.unary_unary(
+                '/Chat/DeleteAccount',
+                request_serializer=chat__pb2.Authentication.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
-        self.GetAccounts = channel.unary_unary(
-                '/Chat/GetAccounts',
-                request_serializer=chat__pb2.Empty.SerializeToString,
+        self.ListUsers = channel.unary_unary(
+                '/Chat/ListUsers',
+                request_serializer=chat__pb2.Filter.SerializeToString,
                 response_deserializer=chat__pb2.Accounts.FromString,
                 )
 
@@ -49,19 +40,7 @@ class ChatStub(object):
 class ChatServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def CreateAccount(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteAccount(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Login(self, request, context):
+    def Initiate(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -73,13 +52,13 @@ class ChatServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ReceiveMessages(self, request, context):
+    def DeleteAccount(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetAccounts(self, request, context):
+    def ListUsers(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -88,34 +67,24 @@ class ChatServicer(object):
 
 def add_ChatServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'CreateAccount': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateAccount,
-                    request_deserializer=chat__pb2.CreateAccountRequest.FromString,
-                    response_serializer=chat__pb2.Response.SerializeToString,
-            ),
-            'DeleteAccount': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteAccount,
-                    request_deserializer=chat__pb2.DeleteAccountRequest.FromString,
-                    response_serializer=chat__pb2.Response.SerializeToString,
-            ),
-            'Login': grpc.unary_unary_rpc_method_handler(
-                    servicer.Login,
-                    request_deserializer=chat__pb2.LoginRequest.FromString,
-                    response_serializer=chat__pb2.Response.SerializeToString,
+            'Initiate': grpc.unary_stream_rpc_method_handler(
+                    servicer.Initiate,
+                    request_deserializer=chat__pb2.InitialRequest.FromString,
+                    response_serializer=chat__pb2.Message.SerializeToString,
             ),
             'SendMessage': grpc.unary_unary_rpc_method_handler(
                     servicer.SendMessage,
                     request_deserializer=chat__pb2.Message.FromString,
-                    response_serializer=chat__pb2.Response.SerializeToString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
-            'ReceiveMessages': grpc.unary_stream_rpc_method_handler(
-                    servicer.ReceiveMessages,
-                    request_deserializer=chat__pb2.Empty.FromString,
-                    response_serializer=chat__pb2.Message.SerializeToString,
+            'DeleteAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteAccount,
+                    request_deserializer=chat__pb2.Authentication.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
-            'GetAccounts': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAccounts,
-                    request_deserializer=chat__pb2.Empty.FromString,
+            'ListUsers': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListUsers,
+                    request_deserializer=chat__pb2.Filter.FromString,
                     response_serializer=chat__pb2.Accounts.SerializeToString,
             ),
     }
@@ -129,7 +98,7 @@ class Chat(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def CreateAccount(request,
+    def Initiate(request,
             target,
             options=(),
             channel_credentials=None,
@@ -139,43 +108,9 @@ class Chat(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Chat/CreateAccount',
-            chat__pb2.CreateAccountRequest.SerializeToString,
-            chat__pb2.Response.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def DeleteAccount(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Chat/DeleteAccount',
-            chat__pb2.DeleteAccountRequest.SerializeToString,
-            chat__pb2.Response.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def Login(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Chat/Login',
-            chat__pb2.LoginRequest.SerializeToString,
-            chat__pb2.Response.FromString,
+        return grpc.experimental.unary_stream(request, target, '/Chat/Initiate',
+            chat__pb2.InitialRequest.SerializeToString,
+            chat__pb2.Message.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -192,12 +127,12 @@ class Chat(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Chat/SendMessage',
             chat__pb2.Message.SerializeToString,
-            chat__pb2.Response.FromString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def ReceiveMessages(request,
+    def DeleteAccount(request,
             target,
             options=(),
             channel_credentials=None,
@@ -207,14 +142,14 @@ class Chat(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_stream(request, target, '/Chat/ReceiveMessages',
-            chat__pb2.Empty.SerializeToString,
-            chat__pb2.Message.FromString,
+        return grpc.experimental.unary_unary(request, target, '/Chat/DeleteAccount',
+            chat__pb2.Authentication.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def GetAccounts(request,
+    def ListUsers(request,
             target,
             options=(),
             channel_credentials=None,
@@ -224,8 +159,8 @@ class Chat(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Chat/GetAccounts',
-            chat__pb2.Empty.SerializeToString,
+        return grpc.experimental.unary_unary(request, target, '/Chat/ListUsers',
+            chat__pb2.Filter.SerializeToString,
             chat__pb2.Accounts.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

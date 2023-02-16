@@ -1,14 +1,93 @@
+#!/usr/bin/env python
+
 from customtkinter import *
 from tkinter import messagebox
+import sys
 import traceback
 
-from part1.client import *
+from interface import Message, AbstractSession
 
 set_appearance_mode("dark")
 
 class Chat(CTkToplevel):
-    def __init__(self, session: Session):
+    class DisplayedMessage:
+        def __init__(self, parent, message: Message):
+            row = parent.grid_size()[1]
+            self.label = CTkLabel(
+                master=parent
+            )
+            self.label.grid(
+                row=row,
+                column=0
+            )
+
+            text_time = CTkFrame(
+                master=parent,
+                fg_color="transparent"
+            )
+            text_time.grid(
+                row=row,
+                column=1
+            )
+
+            self.message = message
+            self.sent = sent
+
+        @property
+        def sent(self):
+            return self.message.sent
+
+        @sent.setter
+        def sent(self, sent):
+            self.message.sent = sent
+
+    def __init__(self, session: AbstractSession):
         super().__init__()
+        self.session = session
+
+        self.geometry("600x600")
+        self.title("262chat")
+
+        CTkLabel(
+            master=self,
+            text="List users:"
+        ).grid(
+            row=0,
+            column=0,
+            sticky=W,
+            padx=10
+        )
+        user_filter = CTkEntry(master=self)
+        user_filter.grid(
+            row=0,
+            column=1
+        )
+        CTkButton(
+            master=self
+        )
+
+        self.messages = CTkScrollableFrame(master=self)
+        self.messages.grid(
+            row=0,
+            column=4,
+            rowspan=2,
+            columnspan=2
+        )
+
+        asyncio.create_task(self.consume())
+
+    async def consume(self):
+        async for message in self.session.stream():
+            self.DisplayedMessage(self, message)
+
+    async def send(self, text, to):
+        payload = Message(to=to, text=text, sent=None)
+        handle = self.DisplayedMessage(self, payload)
+        await self.session.message(payload)
+        handle.message = Message(to=to, text=text, sent=datetime.now())
+
+    def destroy(self):
+        sys.exit()
 
 class App(CTk):
     def __init__(self):
@@ -87,7 +166,7 @@ class App(CTk):
 
             CTkLabel(
                 master=tab,
-                text="Username:"
+                text="Username☑:"
             ).grid(
                 row=0,
                 column=0,
@@ -175,5 +254,14 @@ class App(CTk):
             destroy_now()
         asyncio.create_task(async_destroy())
 
-app = App()
-app.mainloop()
+if __name__ == "__main__":
+    sys.path.append("..")
+    if len(sys.argv) < 2 or sys.argv[1] == "part1":
+        from part1.client import Session
+    elif sys.argv[1] == "part2":
+        from part2.client import Session
+    else:
+        print("usage: python gui.py [part1|part2]", file=sys.stderr)
+        sys.exit()
+    app = App()
+    app.mainloop()

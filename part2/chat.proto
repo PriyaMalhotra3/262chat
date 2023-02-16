@@ -1,50 +1,50 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
 service Chat {
-   rpc CreateAccount (CreateAccountRequest) returns (Response) {}
-   rpc DeleteAccount (DeleteAccountRequest) returns (Response) {}
-   
-   rpc Login (LoginRequest) returns (Response) {}
-   
-   rpc SendMessage (Message) returns (Response) {}
-   rpc ReceiveMessages (Empty) returns (stream Message) {}
-   
-   rpc GetAccounts (Empty) returns (Accounts) {}
-}
+  rpc Initiate (InitialRequest) returns (stream ReceivedMessage) {}
 
+  rpc SendMessage (SentMessage) returns (google.protobuf.Empty) {}
+  rpc DeleteAccount (Authentication) returns (google.protobuf.Empty) {}
 
-// ---------- Requests ----------
-
-message CreateAccountRequest {
-   string username = 1;
-   string password = 2;
-}
-
-message DeleteAccountRequest {
-   string username = 1;
-   string password = 2;
-}
-
-message LoginRequest {
-   string username = 1;
-   string password = 2;
+  rpc ListUsers (Filter) returns (Users) {}
 }
 
 message Message {
-   string from = 1;
-   string to = 2;
-   string message = 3;
+  string username = 1;
+  string text = 2;
 }
 
-message Empty {}
+// ---------- Requests ----------
+
+message Authentication {
+  string username = 1;
+  string password = 2;
+}
+
+message InitialRequest {
+  bool create = 1;
+  Authentication user = 2;
+}
+
+message SentMessage {
+  Message message = 1;
+  Authentication user = 2;
+}
+
+message Filter {
+  string glob = 1;
+}
 
 // ---------- Responses ----------
 
-message Response {
-   bool success = 1;
-   string error = 2;
+message Users {
+  repeated string usernames = 1;
 }
 
-message Accounts {
-   repeated string accounts = 1;
+message ReceivedMessage {
+  Message message = 1;
+  google.protobuf.Timestamp sent = 2;
 }

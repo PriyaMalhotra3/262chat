@@ -81,9 +81,9 @@ class Session(socketserver.BaseRequestHandler):
             try:
                 user = users[username]
             except KeyError:
-                raise ProtocolException("Incorrect username or password.")
+                raise ProtocolException("Incorrect username.")
             if user.password != password:
-                raise ProtocolException("Incorrect username or password.")
+                raise ProtocolException("Incorrect password.")
             if not user.lock.acquire(blocking=False):
                 user.send(f"ADMIN Someone from {client_address[0]}:{client_address[1]} tried to log in as you and guessed your password correctly.")
                 raise ProtocolException(f"{username} is already logged in; are you trying to break in?")
@@ -131,17 +131,17 @@ class Session(socketserver.BaseRequestHandler):
                 pass
         try:
             while True:
-                command = self._readstring()
-                if command == "LIST":
-                    self.list_users()
-                elif command == "DELETE":
+                command = self._readstring().split(maxsplit=1)
+                if command[0] == "DELETE":
                     self.delete()
-                elif command.startswith("MESSAGE"):
+                elif command[0] == "LIST":
+                    self.list_users(*command[1:])
+                elif command[0] == "MESSAGE":
                     try:
-                        _, to, message = command.split(maxsplit=2)
+                        to, message = command[1].split(maxsplit=1)
                         self.message(to, message)
-                    except ValueError as e:
-                        self.send(ProtocolException("Incorrect message format: " + e.args[0]))
+                    except (ValueError, KeyError) as e:
+                        self.send(ProtocolException("Incorrect message format."))
                     except ProtocolException as e:
                         self.send(e)
                 else:

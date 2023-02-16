@@ -1,9 +1,12 @@
 import asyncio
+from datetime import datetime
+
+from interface import Message, AbstractSession
 
 class ChatException(Exception):
     pass
 
-class Session:
+class Session(AbstractSession):
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         self._reader = reader
         self._writer = writer
@@ -36,8 +39,12 @@ class Session:
     async def _initiate(self, command, username, password):
         await self._send(f"{command.upper()} {username}\0{password}")
         await self._receive()
-        self.username = username
+        self._username = username
         asyncio.create_task(self._consume())
+
+    @property
+    def username(self):
+        return self._username
 
     async def register(self, username, password):
         await self._initiate("REGISTER", username, password)
@@ -45,17 +52,31 @@ class Session:
     async def login(self, username, password):
         await self._initiate("LOGIN", username, password)
 
-    async def listen(self, event):
+    async def _listen(self, event):
         return await self._queue(event).get()
 
     async def list_users(self, pattern="*"):
         await self._send(f"LIST {pattern}")
-        return await response.listen("LISTING")
+        users = await response._listen("LISTING")
+        return users[1].split("\n")
 
     async def delete(self):
         await self._send("DELETE")
-        await self.listen("DELETED")
+        await self._listen("DELETED")
 
-    async def message(self, to, text):
-        await self._send(f"MESSAGE {to}\n{text}")
-        await self.listen("SENT")
+    async def message(self, payload: Message):
+        await self._send(f"MESSAGE {payload.to}\n{payload.text}")
+        await self._listen("SENT")
+
+    async def stream(self):
+        while True:
+            _, raw = await self._listen("MESSAGE")
+            to, _, sent, text = raw[1].split(maxsplit=3)
+            yield Message(
+                to=to,
+                text=text,
+                sent=datetime.fromisoformat(sent)
+            )
+
+    async def close(self):
+        await self.writer.wait_closed()

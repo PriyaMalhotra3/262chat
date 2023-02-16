@@ -1,5 +1,4 @@
 import os
-import sys
 import asyncio
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -8,7 +7,6 @@ import grpc
 from google.protobuf.empty_pb2 import Empty
 from google.protobuf.timestamp_pb2 import Timestamp
 
-print(sys.path)
 from generated import chat_pb2, chat_pb2_grpc
 
 @dataclass

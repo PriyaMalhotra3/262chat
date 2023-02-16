@@ -5,7 +5,7 @@ import logging
 import grpc
 
 from interface import Message, AbstractSession
-from part2.generated import chat_pb2, chat_pb2_grpc
+from .generated import chat_pb2, chat_pb2_grpc
 
 class Session(AbstractSession):
     def __init__(self, channel):

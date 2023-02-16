@@ -1,19 +1,20 @@
-import sys
 import os
+import sys
+import asyncio
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from asyncio import Queue
 
 import grpc
 from google.protobuf.empty_pb2 import Empty
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from part2.generated import chat_pb2, chat_pb2_grpc
+print(sys.path)
+from generated import chat_pb2, chat_pb2_grpc
 
 @dataclass
 class User:
     password: str
-    queue: Queue
+    queue: asyncio.Queue
 
 class Chat(chat_pb2_grpc.ChatServicer):
     def __init__(self):
@@ -36,10 +37,10 @@ class Chat(chat_pb2_grpc.ChatServicer):
             if request.user.username in self.users:
                 context.set_details(f"Username {request.user.username} is not available.")
                 context.set_code(grpc.StatusCode.ALREADY_EXISTS)
-                return chat_pb2.Message()
-            self.users[request.user.username] = User(request.user.password, Queue())
+                return
+            self.users[request.user.username] = User(request.user.password, asyncio.Queue())
         if not self._validate(request.user, context):
-            return chat_pb2.Message()
+            return
         while True:
             yield await self.users[request.user.username].queue.get()
 
@@ -79,4 +80,4 @@ async def serve(port):
     await server.wait_for_termination()
 
 if __name__ == '__main__':
-    serve(int(os.getenv("PORT", 8080)))
+    asyncio.run(serve(int(os.getenv("PORT", 8080))))

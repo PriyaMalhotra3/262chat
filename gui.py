@@ -3,6 +3,7 @@
 from customtkinter import *
 from tkinter import messagebox
 import sys
+from os import path
 import traceback
 
 from interface import Message, AbstractSession
@@ -255,7 +256,7 @@ class App(CTk):
         asyncio.create_task(async_destroy())
 
 if __name__ == "__main__":
-    sys.path.append("..")
+    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     if len(sys.argv) < 2 or sys.argv[1] == "part1":
         from part1.client import Session
     elif sys.argv[1] == "part2":

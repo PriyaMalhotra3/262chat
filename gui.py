@@ -52,6 +52,11 @@ class Chat(CTkToplevel):
         self.geometry("600x600")
         self.title("262chat")
 
+        users_frame = CTkFrame(
+            master=self,
+            corner_radius=0
+        )
+
         CTkLabel(
             master=self,
             text="List users:"

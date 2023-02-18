@@ -1,8 +1,14 @@
 # 262chat
 
+## Testing
+
+```shell
+$ python3 -m test
+```
+
 ## Installation
 
-```
+```shell
 pip3 install -r requirements.txt
 ```
 

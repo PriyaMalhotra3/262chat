@@ -153,6 +153,7 @@ class App(CTk):
             expand=True,
             padx=10
         )
+        self.port.bind("<KeyRelease>", self.checkport)
         self.part2 = CTkSwitch(
             master=server_frame,
             text="gRPC"
@@ -230,6 +231,15 @@ class App(CTk):
             )
             button.configure(command=lambda source=button: asyncio.create_task(self.connect(source)))
 
+    def checkport(self, event):
+        i = 0
+        for char in self.port.get():
+            print(char)
+            if not char.isdecimal():
+                self.port.delete(i)
+            else:
+                i += 1
+
     async def connect(self, source):
         source.configure(state="disabled")
         self.tabview.configure(state="disabled")
@@ -260,7 +270,7 @@ class App(CTk):
         async def loop():
             while not self.destroyed:
                 self.update()
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0)
         asyncio.run(loop())
 
     def destroy(self):

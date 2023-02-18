@@ -58,11 +58,15 @@ class Session(socketserver.BaseRequestHandler):
 
     def send(self, message):
         "Thread-safe."
+        print(message) # For debugging.
         encoded = str(message).encode("utf-8")
         if b"\0" in encoded:
             raise ValueError("Message cannot contain premature null bytes.")
         with self.lock:
-            self.socket.sendall(encoded + b"\0")
+            try:
+                self.socket.sendall(encoded + b"\0")
+            except Exception:
+                raise SessionDeath
 
     def associate(self) -> User:
         try:
@@ -116,20 +120,20 @@ class Session(socketserver.BaseRequestHandler):
         self.send("SENT")
 
     def handle(self):
-        while self.user is None:
-            try:
-                self.associate()
-                self.send("SUCCESS You are logged in.")
-            except ProtocolException as e:
-                self.send(e)
-        with self.lock:
-            self.user.session = self
-            try:
-                while True:
-                    self.send(self.user.queue.get(block=False))
-            except Empty:
-                pass
         try:
+            while self.user is None:
+                try:
+                    self.associate()
+                    self.send("SUCCESS You are logged in.")
+                except ProtocolException as e:
+                    self.send(e)
+            with self.lock:
+                self.user.session = self
+                try:
+                    while True:
+                        self.send(self.user.queue.get(block=False))
+                except Empty:
+                    pass
             while True:
                 command = self._readstring().split(maxsplit=1)
                 if command[0] == "DELETE":
@@ -156,9 +160,14 @@ class Session(socketserver.BaseRequestHandler):
 
 def serve(address: tuple[str, int]):
     with socketserver.ThreadingTCPServer(address, Session) as server:
-        print(f"Serving on {address[0]}:{address[1]}...")
         server.serve_forever()
 
 if __name__ == "__main__":
     # We are running as a script right now, so go ahead and start the server:
-    serve(("localhost", int(os.getenv("PORT", 8080))))
+    import sys
+    from os import path
+    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+    from ip import local_ip
+    port = int(os.getenv("PORT", 8080))
+    print(f"Serving on {local_ip()}:{port}...")
+    serve(("localhost", port))

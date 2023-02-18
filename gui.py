@@ -52,42 +52,46 @@ class Chat(CTkToplevel):
         self.geometry("600x600")
         self.title("262chat")
 
-        users_frame = CTkFrame(
-            master=self,
-            corner_radius=0
-        )
-
-        CTkLabel(
-            master=self,
-            text="List users:"
-        ).grid(
-            row=0,
-            column=0,
-            sticky=W,
-            padx=10
-        )
-        user_filter = CTkEntry(master=self)
-        user_filter.grid(
-            row=0,
-            column=1
-        )
-        CTkButton(
-            master=self
-        )
-
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
         self.messages = CTkScrollableFrame(master=self)
         self.messages.grid(
             row=0,
-            column=4,
-            rowspan=2,
-            columnspan=2
+            column=0,
+            columnspan=2,
+            sticky=NSEW,
+            padx=10,
+            pady=10
+        )
+        self.filter = StringVar(value="*")
+        CTkComboBox(
+            master=self,
+            values=["Alice", "Bob"],
+            variable=self.filter
+        ).grid(
+            row=1,
+            column=0,
+            padx=10,
+            pady=10
+        )
+        self.draft = CTkEntry(
+            master=self,
+            placeholder_text="Message..."
+        )
+        self.draft.grid(
+            row=1,
+            column=1,
+            sticky=EW,
+            padx=10,
+            pady=10
         )
 
         asyncio.create_task(self.consume())
 
     async def consume(self):
         async for message in self.session.stream():
-            self.DisplayedMessage(self, message)
+            # self.DisplayedMessage(self, message)
+            pass
 
     async def send(self, text, to):
         payload = Message(to=to, text=text, sent=None)
@@ -96,7 +100,8 @@ class Chat(CTkToplevel):
         handle.message = Message(to=to, text=text, sent=datetime.now())
 
     def destroy(self):
-        sys.exit()
+        super().destroy()
+        os._exit(0)
 
 class App(CTk):
     def __init__(self):
@@ -239,7 +244,6 @@ class App(CTk):
     def checkport(self, event):
         i = 0
         for char in self.port.get():
-            print(char)
             if not char.isdecimal():
                 self.port.delete(i)
             else:

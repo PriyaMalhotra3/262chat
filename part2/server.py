@@ -73,9 +73,13 @@ async def serve(port):
     server = grpc.aio.server()
     chat_pb2_grpc.add_ChatServicer_to_server(Chat(), server)
     server.add_insecure_port(f"[::]:{port}")
-    print(f"Serving on localhost:{port}...")
     await server.start()
     await server.wait_for_termination()
 
 if __name__ == '__main__':
+    import sys
+    from os import path
+    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+    from ip import local_ip
+    print(f"Serving on {local_ip()}:{port}...")
     asyncio.run(serve(int(os.getenv("PORT", 8080))))

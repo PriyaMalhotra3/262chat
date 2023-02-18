@@ -53,37 +53,50 @@ class Chat(CTkToplevel):
         self.title("262chat")
 
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=1)
+        self.grid_columnconfigure(1, weight=2)
+        self.grid_columnconfigure(2, weight=0)
         self.messages = CTkScrollableFrame(master=self)
         self.messages.grid(
             row=0,
             column=0,
-            columnspan=2,
+            columnspan=3,
             sticky=NSEW,
-            padx=10,
-            pady=10
+            padx=32,
+            pady=(32, 10)
         )
-        self.filter = StringVar(value="*")
-        CTkComboBox(
+        self.pattern = StringVar(value="*")
+        self.to = CTkComboBox(
             master=self,
             values=["Alice", "Bob"],
-            variable=self.filter
-        ).grid(
+            variable=self.pattern
+        )
+        self.to.grid(
             row=1,
             column=0,
-            padx=10,
-            pady=10
+            padx=(32, 10),
+            pady=(10, 32)
         )
+        asyncio.create_task(self.update_users())
+        self.to.bind("<KeyRelease>", lambda event: asyncio.create_task(self.update_users(event)))
         self.draft = CTkEntry(
-            master=self,
-            placeholder_text="Message..."
+            master=self
         )
         self.draft.grid(
             row=1,
             column=1,
             sticky=EW,
             padx=10,
-            pady=10
+            pady=(10, 32)
+        )
+        CTkButton(
+            master=self,
+            text="Send"
+        ).grid(
+            row=1,
+            column=2,
+            padx=(10, 32),
+            pady=(10, 32)
         )
 
         asyncio.create_task(self.consume())
@@ -99,6 +112,15 @@ class Chat(CTkToplevel):
         await self.session.message(payload)
         handle.message = Message(to=to, text=text, sent=datetime.now())
 
+    async def update_users(self, event=None):
+        users = await self.session.list_users(self.pattern.get())
+        self.to.configure(values=users)
+        if event is not None:
+            try:
+                self.to._open_dropdown_menu()
+            except Exception:
+                pass
+
     def destroy(self):
         super().destroy()
         os._exit(0)
@@ -106,7 +128,6 @@ class Chat(CTkToplevel):
 class App(CTk):
     def __init__(self):
         super().__init__()
-        self.destroyed = False
 
         self.geometry("400x300")
         self.title("262chat")
@@ -277,17 +298,17 @@ class App(CTk):
 
     def mainloop(self):
         async def loop():
-            while not self.destroyed:
-                self.update()
-                await asyncio.sleep(0)
+            while True:
+                try:
+                    self.update()
+                    await asyncio.sleep(0.01)
+                except Exception as e:
+                    print(e, file=sys.stderr)
         asyncio.run(loop())
 
     def destroy(self):
-        destroy_now = super().destroy
-        async def async_destroy():
-            self.destroyed = True
-            destroy_now()
-        asyncio.create_task(async_destroy())
+        super().destroy
+        os._exit(0)
 
 if __name__ == "__main__":
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))

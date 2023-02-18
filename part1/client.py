@@ -57,8 +57,8 @@ class Session(AbstractSession):
 
     async def list_users(self, pattern="*"):
         await self._send(f"LIST {pattern}")
-        users = await response._listen("LISTING")
-        return users[1].split("\n")
+        users = await self._listen("LISTING")
+        return users[1].split("\n") if len(users) > 1 else []
 
     async def delete(self):
         await self._send("DELETE")

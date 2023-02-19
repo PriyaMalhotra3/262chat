@@ -5,7 +5,7 @@ from tkinter import messagebox
 import asyncio
 import sys
 from os import path
-import traceback
+from datetime import datetime
 
 from interface import Message, AbstractSession
 from part1.client import Session as Part1Session
@@ -13,38 +13,55 @@ from part2.client import Session as Part2Session
 
 set_appearance_mode("dark")
 
+class WrapLabel(CTkLabel):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(
+            master=parent,
+            *args,
+            **kwargs
+        )
+        self.bind("<Configure>", lambda _: self.configure(
+            wraplength=self.winfo_width()
+        ))
+
+class AnnotatedText(CTkFrame):
+    def __init__(self, parent, text):
+        super().__init__(
+            master=parent,
+            fg_color="transparent",
+        )
+        WrapLabel(
+            self,
+            text=text,
+            justify="left",
+            compound="left",
+            anchor=W
+        ).pack(
+            fill=X
+        )
+
+    def annotate(self, title, body):
+        text = title + ": "
+        if isinstance(body, list):
+            text += ", ".join(body)
+        elif isinstance(body, datetime):
+            text += body.strftime("%c")
+        else:
+            text += str(body)
+        WrapLabel(
+            self,
+            font=CTkFont(
+                size=10
+            ),
+            text=text,
+            justify="left",
+            compound="left",
+            anchor=W
+        ).pack(
+            fill=X
+        )
+
 class Chat(CTkToplevel):
-    class DisplayedMessage:
-        def __init__(self, parent, message: Message):
-            row = parent.grid_size()[1]
-            self.label = CTkLabel(
-                master=parent
-            )
-            self.label.grid(
-                row=row,
-                column=0
-            )
-
-            text_time = CTkFrame(
-                master=parent,
-                fg_color="transparent"
-            )
-            text_time.grid(
-                row=row,
-                column=1
-            )
-
-            self.message = message
-            self.sent = sent
-
-        @property
-        def sent(self):
-            return self.message.sent
-
-        @sent.setter
-        def sent(self, sent):
-            self.message.sent = sent
-
     def __init__(self, session: AbstractSession):
         super().__init__()
         self.session = session
@@ -54,67 +71,119 @@ class Chat(CTkToplevel):
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(2, weight=1)
-        self.grid_columnconfigure(1, weight=2)
-        self.grid_columnconfigure(2, weight=0)
-        self.messages = CTkScrollableFrame(master=self)
+        self.messages = CTkScrollableFrame(
+            master=self,
+            fg_color="transparent"
+        )
+        self.messages.grid_columnconfigure(1, weight=1)
         self.messages.grid(
             row=0,
             column=0,
-            columnspan=3,
+            columnspan=4,
             sticky=NSEW,
             padx=32,
             pady=(32, 10)
         )
+        CTkLabel(
+            master=self,
+            text="To:"
+        ).grid(
+            row=1,
+            column=0,
+            padx=(32, 0),
+            pady=(10, 32)
+        )
         self.pattern = StringVar(value="*")
         self.to = CTkComboBox(
             master=self,
-            values=["Alice", "Bob"],
+            values=[],
             variable=self.pattern
         )
         self.to.grid(
             row=1,
-            column=0,
-            padx=(32, 10),
+            column=1,
+            padx=10,
             pady=(10, 32)
         )
         asyncio.create_task(self.update_users())
         self.to.bind("<KeyRelease>", lambda event: asyncio.create_task(self.update_users(event)))
-        self.draft = CTkEntry(
-            master=self
+        self.draft = CTkTextbox(
+            master=self,
+            wrap="word"
         )
         self.draft.grid(
             row=1,
-            column=1,
+            column=2,
             sticky=EW,
             padx=10,
             pady=(10, 32)
         )
         CTkButton(
             master=self,
-            text="Send"
+            text="Send",
+            command=lambda: asyncio.create_task(self.send(self.users, self.draft.get("1.0", "end")))
         ).grid(
             row=1,
-            column=2,
+            column=3,
             padx=(10, 32),
             pady=(10, 32)
         )
 
         asyncio.create_task(self.consume())
 
+    def add_message(self, name: str, text: str):
+        row = self.messages.grid_size()[1]
+        CTkLabel(
+            master=self.messages,
+            text=name,
+            font=CTkFont(
+                weight="bold"
+            )
+        ).grid(
+            row=row,
+            column=0,
+            sticky=N
+        )
+
+        handle = AnnotatedText(
+            self.messages,
+            text
+        )
+        handle.grid(
+            row=row,
+            column=1,
+            sticky=EW
+        )
+        return handle
+
     async def consume(self):
         async for message in self.session.stream():
-            # self.DisplayedMessage(self, message)
-            pass
+            handle = self.add_message(message.to, message.text)
+            if message.sent is not None:
+                handle.annotate("Sent", message.sent)
 
-    async def send(self, text, to):
-        payload = Message(to=to, text=text, sent=None)
-        handle = self.DisplayedMessage(self, payload)
-        await self.session.message(payload)
-        handle.message = Message(to=to, text=text, sent=datetime.now())
+    async def send(self, to, text):
+        display = self.add_message(self.session.username, text)
+        await asyncio.gather(*(
+            self.session.message(Message(
+                to=user.split(maxsplit=1)[0],
+                text=text
+            ))
+            for user in to
+        ))
+        display.annotate("Sent", datetime.now())
 
     async def update_users(self, event=None):
-        users = await self.session.list_users(self.pattern.get())
-        self.to.configure(values=users)
+        self.users = await self.session.list_users(self.pattern.get())
+        try:
+            self.users.remove(self.session.username)
+        except ValueError:
+            pass
+        try:
+            self.users.remove(self.session.username + " (online)")
+        except ValueError:
+            pass
+        self.to.configure(values=self.users)
         if event is not None:
             try:
                 self.to._open_dropdown_menu()
@@ -291,7 +360,6 @@ class App(CTk):
             self.withdraw()
             Chat(session)
         except Exception as e:
-            print(traceback.format_exc())
             messagebox.showerror("Error", str(e))
             self.tabview.configure(state="normal")
             source.configure(state="normal")

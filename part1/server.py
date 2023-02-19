@@ -20,7 +20,7 @@ class User:
     def send(self, message):
         try:
             self.session.send(message)
-        except TypeError:
+        except (TypeError, AttributeError):
             self.queue.put(message)
 users : dict[str, User] = {}
 users_lock = Lock()

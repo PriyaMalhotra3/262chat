@@ -7,7 +7,7 @@ from typing import Optional, AsyncIterator
 class Message:
     to: str
     text: str
-    sent: Optional[datetime]
+    sent: Optional[datetime] = None
 
 class AbstractSession(ABC):
     @classmethod

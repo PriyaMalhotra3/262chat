@@ -1,3 +1,4 @@
+import re
 import asyncio
 from datetime import datetime
 
@@ -71,7 +72,7 @@ class Session(AbstractSession):
     async def stream(self):
         while True:
             _, raw = await self._listen("MESSAGE")
-            to, _, sent, text = raw[1].split(maxsplit=3)
+            to, _, sent, text = raw.split()
             yield Message(
                 to=to,
                 text=text,

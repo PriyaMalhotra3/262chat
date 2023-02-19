@@ -1,17 +1,47 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from customtkinter import *
-from tkinter import messagebox
-import asyncio
 import sys
+import asyncio
+import colorsys
+import tkinter
+from tkinter import messagebox
+from customtkinter import *
 from os import path
 from datetime import datetime
+from zlib import crc32
 
 from interface import Message, AbstractSession
 from part1.client import Session as Part1Session
 from part2.client import Session as Part2Session
 
 set_appearance_mode("dark")
+
+def format_time(t: datetime) -> str:
+    return str(
+        t.astimezone().replace(microsecond=0)
+        - datetime.now().astimezone().replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        )
+    )
+
+def user_color(username:str) -> str:
+    # Hash username to a hue:
+    hue = float(crc32(username.encode("utf-8")) & 0xffffffff)/2**32
+    return "#" + "".join(
+        f"{int(component*255):X}"
+        for component in colorsys.hls_to_rgb(hue, 2/3, 1/3)
+    )
+
+def create_task(coro):
+    async def wrapper(coro):
+        try:
+            await coro
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+    asyncio.create_task(wrapper(coro))
 
 class WrapLabel(CTkLabel):
     def __init__(self, parent, *args, **kwargs):
@@ -24,41 +54,36 @@ class WrapLabel(CTkLabel):
             wraplength=self.winfo_width()
         ))
 
-class AnnotatedText(CTkFrame):
-    def __init__(self, parent, text):
+class Menubar(tkinter.Menu):
+    def __init__(self, parent, *args, **kwargs):
         super().__init__(
             master=parent,
-            fg_color="transparent",
-        )
-        WrapLabel(
-            self,
-            text=text,
-            justify="left",
-            compound="left",
-            anchor=W
-        ).pack(
-            fill=X
+            activebackground="gray10",
+            background="gray14",
+            activeforeground="gray84",
+            foreground="gray84",
+            borderwidth=0,
+            activeborderwidth=0,
+            relief="flat",
+            tearoff=False,
+            *args,
+            **kwargs
         )
 
-    def annotate(self, title, body):
-        text = title + ": "
-        if isinstance(body, list):
-            text += ", ".join(body)
-        elif isinstance(body, datetime):
-            text += body.strftime("%c")
-        else:
-            text += str(body)
-        WrapLabel(
-            self,
-            font=CTkFont(
-                size=10
-            ),
-            text=text,
-            justify="left",
-            compound="left",
-            anchor=W
-        ).pack(
-            fill=X
+class Menu(tkinter.Menu):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(
+            master=parent,
+            activebackground="gray28",
+            background="gray20",
+            activeforeground="gray84",
+            foreground="gray84",
+            borderwidth=5,
+            activeborderwidth=0,
+            relief="flat",
+            tearoff=False,
+            *args,
+            **kwargs
         )
 
 class Chat(CTkToplevel):
@@ -105,12 +130,16 @@ class Chat(CTkToplevel):
             padx=10,
             pady=(10, 32)
         )
-        asyncio.create_task(self.update_users())
-        self.to.bind("<KeyRelease>", lambda event: asyncio.create_task(self.update_users(event)))
+        create_task(self.update_users())
+        self.to.bind("<KeyRelease>", lambda event: create_task(self.update_users(event)))
         self.draft = CTkTextbox(
             master=self,
-            wrap="word"
+            wrap="word",
+            height=10
         )
+        self.draft.bind("<Shift-Return>", self.ship_draft)
+        self.draft.bind("<Control-Return>", self.ship_draft)
+        self.draft.bind("<KeyRelease>", self.resize_draft)
         self.draft.grid(
             row=1,
             column=2,
@@ -121,57 +150,110 @@ class Chat(CTkToplevel):
         CTkButton(
             master=self,
             text="Send",
-            command=lambda: asyncio.create_task(self.send(self.users, self.draft.get("1.0", "end")))
+            command=self.ship_draft
         ).grid(
             row=1,
             column=3,
             padx=(10, 32),
-            pady=(10, 32)
+            pady=(10, 32),
+            sticky=NS
         )
 
-        asyncio.create_task(self.consume())
+        menubar = Menubar(self)
+        account_menu = Menu(menubar)
+        account_menu.add_command(label="Logout", command=self.destroy)
+        account_menu.add_separator()
+        account_menu.add_command(label="Delete account...", command=self.delete_account)
+        menubar.add_cascade(label="Account ", menu=account_menu)
+        self.configure(menu=menubar)
 
-    def add_message(self, name: str, text: str):
+        create_task(self.consume())
+
+    def delete_account(self):
+        async def delete_and_quit():
+            await self.session.delete()
+            self.destroy()
+        if messagebox.askyesno(
+                "Delete Account",
+                "Are you sure you want to delete your 262chat account? This operation cannot be undone."
+        ):
+            create_task(delete_and_quit())
+
+    def ship_draft(self, event=None):
+        create_task(self.send())
+
+    def resize_draft(self, event=None):
+        self.draft.configure(
+            height=min(200, 16*float(self.draft.index("end")))
+        )
+
+    def add_message(self, username: str, text: str):
         row = self.messages.grid_size()[1]
         CTkLabel(
             master=self.messages,
-            text=name,
+            text=username,
+            text_color="#FFFFFF" if username == self.session.username else user_color(username),
             font=CTkFont(
                 weight="bold"
-            )
+            ),
+            justify="right",
+            compound="right",
+            anchor=E
         ).grid(
             row=row,
             column=0,
-            sticky=N
+            sticky=NE,
+            padx=(0, 10)
         )
 
-        handle = AnnotatedText(
+        WrapLabel(
             self.messages,
-            text
-        )
-        handle.grid(
+            text=text,
+            justify="left",
+            compound="left",
+            anchor=W
+        ).grid(
             row=row,
             column=1,
-            sticky=EW
+            sticky=N+EW,
+            pady=(5, 0)
         )
-        return handle
+
+        time = CTkLabel(
+            master=self.messages,
+            font=CTkFont(
+                size=11
+            )
+        )
+        time.grid(
+            row=row,
+            column=2,
+            sticky=N,
+            padx=10
+        )
+        return time
 
     async def consume(self):
         async for message in self.session.stream():
-            handle = self.add_message(message.to, message.text)
+            time = self.add_message(message.to, message.text)
             if message.sent is not None:
-                handle.annotate("Sent", message.sent)
+                time.configure(text=format_time(message.sent))
 
-    async def send(self, to, text):
-        display = self.add_message(self.session.username, text)
+    async def send(self):
+        text = self.draft.get("1.0", "end")
+        self.draft.delete("1.0", "end")
+        self.resize_draft()
+        if len(text.strip()) == 0:
+            return
+        time = self.add_message(self.session.username, text)
         await asyncio.gather(*(
             self.session.message(Message(
                 to=user.split(maxsplit=1)[0],
                 text=text
             ))
-            for user in to
+            for user in self.users
         ))
-        display.annotate("Sent", datetime.now())
+        time.configure(text=format_time(datetime.now()))
 
     async def update_users(self, event=None):
         self.users = await self.session.list_users(self.pattern.get())
@@ -329,7 +411,7 @@ class App(CTk):
                 ipadx=5,
                 ipady=5
             )
-            button.configure(command=lambda source=button: asyncio.create_task(self.connect(source)))
+            button.configure(command=lambda source=button: create_task(self.connect(source)))
 
     def checkport(self, event):
         i = 0
@@ -359,8 +441,7 @@ class App(CTk):
             await endpoint(self.username.get(), self.password.get())
             self.withdraw()
             Chat(session)
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        finally:
             self.tabview.configure(state="normal")
             source.configure(state="normal")
 

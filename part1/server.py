@@ -42,6 +42,25 @@ class Session(socketserver.BaseRequestHandler):
         self.lock = RLock()
         self.user = None
 
+    def _log(self, text, receiving=False):
+        ip, port = self.socket.getpeername()
+        label = f"{ip}:{port}"
+        if receiving:
+            label += " -> "
+        else:
+            label += " <- "
+        first = True
+        for line in text.splitlines():
+            print(
+                (
+                    label
+                    if first
+                    else " "*len(label)
+                )
+                + line
+            )
+            first = False
+
     def _readstring(self):
         "Not thread-safe."
         terminator = self.transfer_buffer.find(0)
@@ -53,13 +72,14 @@ class Session(socketserver.BaseRequestHandler):
             terminator = self.transfer_buffer.find(0)
         result = self.transfer_buffer[:terminator].decode("utf-8")
         del self.transfer_buffer[:terminator + 1]
-        print(result) # For debugging.
+        self._log(result, True)
         return result
 
     def send(self, message):
         "Thread-safe."
-        print(message) # For debugging.
-        encoded = str(message).encode("utf-8")
+        text = str(message)
+        self._log(text)
+        encoded = text.encode("utf-8")
         if b"\0" in encoded:
             raise ValueError("Message cannot contain premature null bytes.")
         with self.lock:
@@ -171,3 +191,4 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     print(f"Serving on {local_ip()}:{port}...")
     serve(("localhost", port))
+ 

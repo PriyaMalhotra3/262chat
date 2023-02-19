@@ -72,7 +72,7 @@ class Session(AbstractSession):
     async def stream(self):
         while True:
             _, raw = await self._listen("MESSAGE")
-            to, _, sent, text = raw.split()
+            to, _, sent, text = re.split(r"[\s\0]+", raw, maxsplit=3)
             yield Message(
                 to=to,
                 text=text,

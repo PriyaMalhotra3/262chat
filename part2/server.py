@@ -1,5 +1,6 @@
 import os
 import asyncio
+import fnmatch
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
@@ -19,35 +20,43 @@ class Chat(chat_pb2_grpc.ChatServicer):
         super().__init__()
         self.users = {}
 
-    def _validate(self, user, context):
-        if request.user.username not in self.users:
-            context.set_details("Incorrect username.")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            return False
-        if request.user.password != self.users[request.user.username].password:
-            context.set_details("Incorrect username.")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            return False
-        return True
+    async def _validate(self, user, context):
+        if not user.username:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Username must not be empty."
+            )
+        if user.username not in self.users:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Incorrect username."
+            )
+        if user.password != self.users[user.username].password:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Incorrect password."
+            )
 
     async def Initiate(self, request, context):
         if request.create:
             if request.user.username in self.users:
-                context.set_details(f"Username {request.user.username} is not available.")
-                context.set_code(grpc.StatusCode.ALREADY_EXISTS)
-                return
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"Username {request.user.username} is not available."
+                )
             self.users[request.user.username] = User(request.user.password, asyncio.Queue())
-        if not self._validate(request.user, context):
-            return
+        await self._validate(request.user, context)
+        yield chat_pb2.ReceivedMessage() # Heartbeat message.
         while True:
             yield await self.users[request.user.username].queue.get()
 
     async def SendMessage(self, request, context):
-        if not self._validate(request.user, context):
-            return Empty()
+        await self._validate(request.user, context)
         if request.message.username not in self.users:
-            context.set_details(f"{request.message.username} is not a user; try ListUsers to see available users.")
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                f"{request.message.username} is not a user; try ListUsers to see available users."
+            )
         message = request.message
         message.username = request.user.username
         sent = Timestamp()
@@ -59,14 +68,13 @@ class Chat(chat_pb2_grpc.ChatServicer):
         return Empty()
 
     async def DeleteAccount(self, request, context):
-        if not self._validate(request, context):
-            return Empty()
+        await self._validate(request, context)
         del self.users[request.user.username]
         return Empty()
 
     async def ListUsers(self, request, context):
-        return chat_pb2.Accounts(
-            usernames=fnmatch.filter(users.keys(), request.pattern)
+        return chat_pb2.Users(
+            usernames=fnmatch.filter(self.users.keys(), request.glob)
         )
         
 async def serve(port):
@@ -81,5 +89,6 @@ if __name__ == '__main__':
     from os import path
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     from ip import local_ip
+    port = int(os.getenv("PORT", 8080))
     print(f"Serving on {local_ip()}:{port}...")
-    asyncio.run(serve(int(os.getenv("PORT", 8080))))
+    asyncio.run(serve(port))

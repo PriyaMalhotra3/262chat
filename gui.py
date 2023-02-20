@@ -4,11 +4,13 @@ import sys
 import asyncio
 import colorsys
 import tkinter
+import traceback
 from tkinter import messagebox
 from customtkinter import *
 from os import path
 from datetime import datetime
 from zlib import crc32
+from grpc import RpcError
 
 from interface import Message, AbstractSession
 from part1.client import Session as Part1Session
@@ -39,6 +41,8 @@ def create_task(coro):
     async def wrapper(coro):
         try:
             await coro
+        except RpcError as e:
+            messagebox.showerror("Error", e.details())
         except Exception as e:
             messagebox.showerror("Error", str(e))
     asyncio.create_task(wrapper(coro))
@@ -236,14 +240,14 @@ class Chat(CTkToplevel):
     async def consume(self):
         async for message in self.session.stream():
             time = self.add_message(message.to, message.text)
-            if message.sent is not None:
+            if message.sent:
                 time.configure(text=format_time(message.sent))
 
     async def send(self):
         text = self.draft.get("1.0", "end")
         self.draft.delete("1.0", "end")
         self.resize_draft()
-        if len(text.strip()) == 0:
+        if not text.strip():
             return
         time = self.add_message(self.session.username, text)
         await asyncio.gather(*(
@@ -266,7 +270,7 @@ class Chat(CTkToplevel):
         except ValueError:
             pass
         self.to.configure(values=self.users)
-        if event is not None:
+        if event:
             try:
                 self.to._open_dropdown_menu()
             except Exception:
@@ -439,6 +443,9 @@ class App(CTk):
             else:
                 endpoint = session.login
             await endpoint(self.username.get(), self.password.get())
+        except:
+            raise
+        else:
             self.withdraw()
             Chat(session)
         finally:

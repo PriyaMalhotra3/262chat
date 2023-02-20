@@ -235,6 +235,7 @@ class Chat(CTkToplevel):
             sticky=NE,
             padx=10
         )
+        self.messages._parent_canvas.yview_moveto(1.0)
         return time
 
     async def consume(self):

@@ -33,10 +33,10 @@ class Chat(chat_pb2_grpc.ChatServicer):
             )
 
     async def Initiate(self, request, context):
-        if not request.user.username.strip():
+        if len(request.user.username.split(maxsplit=1)) != 1:
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
-                "Username must not be empty."
+                "Username must not contain whitespace or be empty."
             )
         if request.create:
             if request.user.username in self.users:

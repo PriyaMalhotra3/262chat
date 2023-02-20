@@ -1,7 +1,7 @@
 import os
 import asyncio
 import fnmatch
-from datetime import datetime, timezone
+from datetime import datetime
 from dataclasses import dataclass
 
 import grpc
@@ -21,11 +21,6 @@ class Chat(chat_pb2_grpc.ChatServicer):
         self.users = {}
 
     async def _validate(self, user, context):
-        if not user.username:
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                "Username must not be empty."
-            )
         if user.username not in self.users:
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
@@ -38,6 +33,11 @@ class Chat(chat_pb2_grpc.ChatServicer):
             )
 
     async def Initiate(self, request, context):
+        if not request.user.username.strip():
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Username must not be empty."
+            )
         if request.create:
             if request.user.username in self.users:
                 await context.abort(
@@ -57,11 +57,12 @@ class Chat(chat_pb2_grpc.ChatServicer):
                 grpc.StatusCode.INVALID_ARGUMENT,
                 f"{request.message.username} is not a user; try ListUsers to see available users."
             )
+        to = request.message.username
         message = request.message
         message.username = request.user.username
         sent = Timestamp()
-        sent.FromDatetime(datetime.now(timezone.utc))
-        await self.users[request.message.username].queue.put(chat_pb2.ReceivedMessage(
+        sent.FromDatetime(datetime.now())
+        await self.users[to].queue.put(chat_pb2.ReceivedMessage(
             message=message,
             sent=sent
         ))

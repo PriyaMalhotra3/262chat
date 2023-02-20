@@ -92,7 +92,7 @@ class Session(socketserver.BaseRequestHandler):
         try:
             command, username = self._readstring().split()
         except ValueError as e:
-            raise ProtocolException("Must LOGIN or REGISTER with username to begin session: " + e.args[0])
+            raise ProtocolException("Username must not contain whitespace or be empty.")
 
         password = self._readstring()
 

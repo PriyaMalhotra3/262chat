@@ -232,7 +232,7 @@ class Chat(CTkToplevel):
         time.grid(
             row=row,
             column=2,
-            sticky=N,
+            sticky=NE,
             padx=10
         )
         return time

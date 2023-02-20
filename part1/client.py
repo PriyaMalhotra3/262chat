@@ -25,6 +25,8 @@ class Session(AbstractSession):
     async def _receive(self):
         transfer_buffer = await self._reader.readuntil(b"\0")
         parsed = transfer_buffer[:-1].decode("utf-8").split(maxsplit=1)
+        if not parsed:
+            raise ChatException("The server sent a malformed response. Are you sure you are using the right protocol?")
         if parsed[0] == "ERROR":
             raise ChatException(parsed[1])
         return parsed

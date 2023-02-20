@@ -1,5 +1,9 @@
 # 262chat
 
+![Chat screen screenshot](screenshot2.png)
+
+![Home screen screenshot](screenshot1.png)
+
 ## Testing
 
 ```shell

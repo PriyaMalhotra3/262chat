@@ -24,8 +24,8 @@ class Session(AbstractSession):
         self._stream = self.stub.Initiate(chat_pb2.InitialRequest(
             create=create,
             user=self.auth
-        )).__aiter__()
-        await self._stream.__anext__()
+        ))
+        await self._stream.read()
 
     @property
     def username(self):
@@ -53,7 +53,8 @@ class Session(AbstractSession):
         ))
 
     async def stream(self):
-        async for message in self._stream:
+        while True:
+            message = await self._stream.read()
             yield Message(
                 to=message.message.username,
                 text=message.message.text,
@@ -61,4 +62,5 @@ class Session(AbstractSession):
             )
 
     async def close(self):
-        await self.channel.__aexit__(None, None, None)
+        self._stream.cancel()
+        await self.channel.close()

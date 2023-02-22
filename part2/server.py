@@ -49,7 +49,7 @@ class Chat(chat_pb2_grpc.ChatServicer):
             self.users[request.user.username] = User(request.user.password, asyncio.Queue())
         await self._validate(request.user, context)
         yield chat_pb2.ReceivedMessage() # Heartbeat message.
-        while True:
+        while not context.cancelled():
             yield await self.users[request.user.username].queue.get()
 
     async def SendMessage(self, request, context):
@@ -72,7 +72,7 @@ class Chat(chat_pb2_grpc.ChatServicer):
 
     async def DeleteAccount(self, request, context):
         await self._validate(request, context)
-        del self.users[request.user.username]
+        del self.users[request.username]
         return Empty()
 
     async def ListUsers(self, request, context):

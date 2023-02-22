@@ -7,7 +7,9 @@ import asyncio
 import asyncio.subprocess
 import socket
 from pathlib import Path
+from typing import AsyncIterator
 
+from interface import Message
 from part1.client import Session as Part1Session
 from part2.client import Session as Part2Session
 
@@ -85,9 +87,16 @@ class TestAbstractSession:
         await alice.register("Alice", "pass")
         self.assertEqual(alice.username, "Alice")
 
-    @staticmethod
-    def users_set(usernames):
-        return set(username.split()[0] for username in usernames)
+    def assert_users_equal(self, *username_lists: list[str]):
+        username_sets = [
+            set(
+                username.split()[0]
+                for username in usernames
+            )
+            for usernames in username_lists
+        ]
+        for current, upcoming in zip(username_sets, username_sets[1:]):
+            self.assertSetEqual(current, upcoming)
 
     async def test_list_users(self):
         alice = await self.connect()
@@ -96,8 +105,117 @@ class TestAbstractSession:
         bob = await self.connect()
         await bob.register("Bob", "otherpass")
 
-        self.assertSetEqual(self.users_set(await alice.list_users()), {"Alice", "Bob"})
-        self.assertSetEqual(self.users_set(await bob.list_users()),   {"Alice", "Bob"})
+        self.assert_users_equal(
+            await alice.list_users(),
+            await bob.list_users(),
+            ["Alice", "Bob"]
+        )
+
+    async def test_list_pattern(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        alvin = await self.connect()
+        await alvin.register("Alvin", "pass")
+
+        bob = await self.connect()
+        await bob.register("Bob", "pass")
+
+        self.assert_users_equal(
+            await alice.list_users("Al*"),
+            await bob.list_users(  "Al*"),
+            await alvin.list_users("Al*"),
+            ["Alice", "Alvin"]
+        )
+
+    async def assert_messages_equal(self, stream: AsyncIterator[Message], messages: list[Message]):
+        if not messages:
+            return
+        i = 0
+        async for message in stream:
+            expected = messages[i]
+            self.assertEqual(expected.to,   message.to)
+            self.assertEqual(expected.text, message.text)
+            i += 1
+            if i >= len(messages):
+                return
+
+    async def test_messaging(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        bob = await self.connect()
+        await bob.register("Bob", "pass")
+
+        await alice.message(Message("Bob", "Hi Bob"))
+        await self.assert_messages_equal(bob.stream(), [Message("Alice", "Hi Bob")])
+
+        await bob.message(Message("Alice", "Hi Alice"))
+        await self.assert_messages_equal(alice.stream(), [Message("Bob", "Hi Alice")])
+
+        multiple = [
+            "Crazy weather we've been having",
+            "We should grab a meal sometime",
+            "How've you been?"
+        ]
+        for text in multiple:
+            await alice.message(Message("Bob", text))
+        await self.assert_messages_equal(
+            bob.stream(),
+            [
+                Message("Alice", text)
+                for text in multiple
+            ]
+        )
+
+    async def test_queueing(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        bob = await self.connect()
+        await bob.register("Bob", "pass")
+
+        await alice.message(Message("Bob", "Hi Bob"))
+        await self.assert_messages_equal(bob.stream(), [Message("Alice", "Hi Bob")])
+
+        await alice.close()
+        messages = [
+            "Say, about that meal you were talking about...",
+            "Hey, where'd you go?",
+            "Okay, bye"
+        ]
+        for text in messages:
+            await bob.message(Message("Alice", text))
+        await bob.close()
+
+        alice_later = await self.connect()
+        await alice_later.login("Alice", "pass")
+        await self.assert_messages_equal(
+            alice_later.stream(),
+            [
+                Message("Bob", text)
+                for text in messages
+            ]
+        )
+
+    async def test_delete(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        bob = await self.connect()
+        await bob.register("Bob", "otherpass")
+
+        self.assert_users_equal(
+            await alice.list_users(),
+            await bob.list_users(),
+            ["Alice", "Bob"]
+        )
+
+        await alice.delete()
+        self.assert_users_equal(
+            await bob.list_users(),
+            ["Bob"]
+        )
 
 class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

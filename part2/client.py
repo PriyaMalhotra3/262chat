@@ -61,4 +61,4 @@ class Session(AbstractSession):
             )
 
     async def close(self):
-        await self.channel.__aexit__()
+        await self.channel.__aexit__(None, None, None)

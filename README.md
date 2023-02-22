@@ -3,7 +3,7 @@ _by Priya Malhotra and Lavrans Bjerkestrand_
 
 ![Chat screen screenshot](screenshot2.png)
 
-Welcome to 262chat! You can find our Part 1 custom protocol messaging documentation at [`part1/Protocol.md`](part1/Protocol.md), and our engineering design notebook for the overall project (which also contains technical details like the folder structure) at [`Notebook.md`](Notebook.md). Even more detailed technical documentation is contained inline in the Python source `*.py` files’ comments and [Python docstrings](https://peps.python.org/pep-0257/#what-is-a-docstring). The remainder of this README contains instructions on how to run and test 262chat, depending on who you are:
+Welcome to 262chat! You can find our Part 1 wire protocol documentation at [`part1/Protocol.md`](part1/Protocol.md), and our engineering design notebook for the overall project (which also contains technical details like the folder structure) at [`Notebook.md`](Notebook.md). Even more detailed technical documentation is contained inline in the Python source `*.py` files’ comments and [Python docstrings](https://peps.python.org/pep-0257/#what-is-a-docstring). The remainder of this README contains instructions on how to run and test 262chat, depending on who you are:
 
 ## Installation (for everyone)
 
@@ -41,7 +41,7 @@ $ part2/server.py
 
 ## For testers
 
-From the project root directory, run
+From the project root directory, you can run the entire testsuite (28 different tests) by running
 ```shell
 $ python3 -m unittest -v
 ```

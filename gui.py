@@ -7,7 +7,6 @@ import tkinter
 import traceback
 from tkinter import messagebox
 from customtkinter import *
-from os import path
 from datetime import datetime
 from zlib import crc32
 from grpc import RpcError
@@ -468,13 +467,5 @@ class App(CTk):
         os._exit(0)
 
 if __name__ == "__main__":
-    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-    if len(sys.argv) < 2 or sys.argv[1] == "part1":
-        from part1.client import Session
-    elif sys.argv[1] == "part2":
-        from part2.client import Session
-    else:
-        print("usage: python gui.py [part1|part2]", file=sys.stderr)
-        sys.exit()
     app = App()
     app.mainloop()

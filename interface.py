@@ -12,7 +12,7 @@ class Message:
 class AbstractSession(ABC):
     @classmethod
     @abstractmethod
-    async def connect(cls, host, port):
+    async def connect(cls, host, port) -> "AbstractSession":
         raise NotImplementedError
 
     @abstractmethod

@@ -82,4 +82,5 @@ class Session(AbstractSession):
             )
 
     async def close(self):
-        await self.writer.wait_closed()
+        pass
+        # await self._writer.wait_closed()

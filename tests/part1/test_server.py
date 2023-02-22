@@ -126,3 +126,25 @@ class TestSession(unittest.TestCase):
         sock.recv.assert_called()
         sock.sendall.assert_called_once_with(b"ERROR Incorrect username.\0")
         assert not session.user
+
+    @patch("socket.socket")
+    def test_login_nonexistent(self, sock):
+        # Start a new session with the mocked socket:
+        session = server.Session.__new__(server.Session)
+        session.request = sock
+        session.setup()
+
+        # Queue up the messages:
+        sock.recv.side_effect = [
+            b"LOGIN Alice\0pass\0",
+            None
+        ]
+
+        # Run loop until all messages processed:
+        session.handle()
+
+        # Assert expected post-conditions:        
+        sock.recv.assert_called()
+        sock.sendall.assert_called_once_with(b"ERROR Incorrect username.\0")
+        assert not session.user
+

@@ -192,6 +192,7 @@ if __name__ == "__main__":
     from os import path
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     from ip import local_ip
+    ip = local_ip()
     port = int(os.getenv("PORT", 8080))
-    print(f"Serving on {local_ip()}:{port}...")
-    serve(("localhost", port))
+    print(f"Serving on {ip}:{port}...")
+    serve(("0.0.0.0", port))

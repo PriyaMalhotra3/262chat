@@ -3,7 +3,7 @@ _by Priya Malhotra and Lavrans Bjerkestrand_
 
 ![Chat screen screenshot](screenshot2.png)
 
-Welcome to 262chat! You can find our Part 1 wire protocol documentation at [`part1/Protocol.md`](part1/Protocol.md), and our engineering design notebook for the overall project (which also contains technical details like the folder structure) at [`Notebook.md`](Notebook.md). Even more detailed technical documentation is contained inline in the Python source `*.py` files’ comments and [Python docstrings](https://peps.python.org/pep-0257/#what-is-a-docstring). The remainder of this README contains instructions on how to run and test 262chat, depending on who you are:
+Welcome to 262chat! You can find our Part 1 wire protocol documentation at [`part1/Protocol.md`](part1/Protocol.md), our Part2 gRPC protocol in the [protobuf](https://protobuf.dev/) format at [`part2/chat.proto`](part2/chat.proto), and our engineering design notebook for the overall project (which also contains technical details like the folder structure) at [`Notebook.md`](Notebook.md). Even more detailed technical documentation is contained inline in the Python source `*.py` files’ comments and [Python docstrings](https://peps.python.org/pep-0257/#what-is-a-docstring). The remainder of this README contains instructions on how to run and test 262chat, depending on who you are:
 
 ## Installation (for everyone)
 
@@ -47,4 +47,4 @@ $ python3 -m unittest -v
 ```
 (the `-v` flag is optional, and just gives verbose logging output).
 
-All the unit tests will run automatically. See the corresponding section in our [engineering design notebook](Notebook.md) for more on how we achieved high coverage and thorough tests for both part 1 and part 2 using a unified framework.
+All the unit tests will run automatically. See the corresponding section in our [engineering design notebook](Notebook.md) for more on how we achieved high coverage, thorough tests, and feature parity for both part 1 and part 2 using a unified framework.

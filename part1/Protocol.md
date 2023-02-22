@@ -16,9 +16,41 @@ The following boldface definitions apply for the rest of this wire protocol spec
  
 ## Association Phase
 
-When a client connects to a server, it is in the association state. The server maintains a one-to-one map of online users to live [TCP](https://www.ietf.org/rfc/rfc793.txt) connections. Since the server does not know _a priori_ which user a new [TCP](https://www.ietf.org/rfc/rfc793.txt) connection is associated with, all clients start out in the association state. The only way to move out of the association phase is by either closing/dropping the connection to move into the dead state, or successful authentication by sending one of the following two commands. The client must send one of the following two commands as the first bytes it sends after connecting; otherwise, an [error response](#error-response) will be sent.
+When a client connects to a server, it is in the association state. The server maintains a one-to-one map of online users to live [TCP](https://www.ietf.org/rfc/rfc793.txt) connections. Since the server does not know _a priori_ which user a new [TCP](https://www.ietf.org/rfc/rfc793.txt) connection is associated with, all clients start out in the association state. The only way to move out of the association state is by either closing/dropping the connection to move into the dead state, or successful authentication by sending one of the following two commands to move to the streaming state. The client must send one of the following two commands as the first bytes it sends after connecting; otherwise, an [error response](#error-response) will be sent.
 
 ### REGISTER command 
 #### `REGISTER user\0password\0`
 
-A register command is the string [UTF-8](https://www.ietf.org/rfc/rfc3629.txt) string .
+A register command is a sequence of two **null-terminated string**s, which combined follow the above template. The command asks the server to register a new user with the username `user` and password `password`. `user` must not contain **whitespace** or be empty (in which case it would be an invalid username). `password\0` can be any **null-terminated string**. If and only `user` is not an invalid username and `user` is not already a username of another user on the server, a [success response](#success-response) is sent and the client enters the [streaming phase](#streaming-phase). In all other cases, an [error response](#error-response) is returned, and the client stays in the association state.
+
+### LOGIN command
+#### `LOGIN user\0password\0`
+
+### ERROR response
+
+## Streaming Phase
+
+### MESSAGE response
+#### `MESSAGE sender\nSent: 1984-02-07T12:34:56789+09:00\nbody\0`
+
+inbound
+
+### MESSAGE command
+#### `MESSAGE recipient\nbody\0`
+
+outbound
+
+### SENT response
+#### `SENT\0`
+
+### LIST command
+#### `LIST [patt*rn]`
+
+### LISTING response
+#### `LISTING username1\nusername2\n...\0`
+
+### DELETE command
+#### `DELETE`
+
+### DELETED response
+#### `DELETED Account deleted; you are being disconnected.`

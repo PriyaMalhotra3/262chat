@@ -2,27 +2,27 @@
 
 import os
 import socketserver
+import fnmatch
 from datetime import datetime, timezone
 from threading import Lock, RLock
 from queue import Queue, SimpleQueue, Empty
-import fnmatch
+from dataclasses import dataclass, field
+from typing import Optional
 
 CHUNK_SIZE = 4096
 
+@dataclass
 class User:
-    def __init__(self, username: str, password: str, session):
-        self.username = username
-        self.password = password
-        self.session = session
-        self.queue = SimpleQueue()
-        self.lock = Lock()
-        # Automatically acquire the lock on this user upon initialization.
-        self.lock.acquire()
+    username: str
+    password: str
+    session: Optional["Session"] = field(default=None, compare=False)
+    queue: Queue[str] = field(default_factory=SimpleQueue, compare=False)
+    lock: Lock = field(default_factory=Lock, compare=False)
 
     def send(self, message):
         try:
             self.session.send(message)
-        except (TypeError, AttributeError):
+        except:
             self.queue.put(message)
 users : dict[str, User] = {}
 users_lock = Lock()
@@ -103,6 +103,7 @@ class Session(socketserver.BaseRequestHandler):
                 if username in users:
                     raise ProtocolException(f'Username "{username}" is not available.')
                 users[username] = self.user = User(username, password, self)
+                self.user.lock.acquire()
         elif command == "LOGIN":
             try:
                 user = users[username]
@@ -111,7 +112,8 @@ class Session(socketserver.BaseRequestHandler):
             if user.password != password:
                 raise ProtocolException("Incorrect password.")
             if not user.lock.acquire(blocking=False):
-                user.send(f"ADMIN Someone from {client_address[0]}:{client_address[1]} tried to log in as you and guessed your password correctly.")
+                ip, port = self.socket.getpeername()
+                user.send(f"ADMIN Someone from {ip}:{port} tried to log in as you and guessed your password correctly.")
                 raise ProtocolException(f"{username} is already logged in; are you trying to break in?")
             self.user = user
         else:
@@ -121,7 +123,7 @@ class Session(socketserver.BaseRequestHandler):
         self.send("LISTING\n"
                   + "\n".join(username
                               + (" (online)"
-                                 if users[username].session is not None
+                                 if users[username].session
                                  else "")
                               for username in fnmatch.filter(users, pattern)))
 
@@ -143,7 +145,7 @@ class Session(socketserver.BaseRequestHandler):
 
     def handle(self):
         try:
-            while self.user is None:
+            while not self.user:
                 try:
                     self.associate()
                     self.send("SUCCESS You are logged in.")
@@ -176,7 +178,7 @@ class Session(socketserver.BaseRequestHandler):
             pass
 
     def finish(self):
-        if self.user is not None:
+        if self.user:
             self.user.session = None
             self.user.lock.release()
 
@@ -193,4 +195,3 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     print(f"Serving on {local_ip()}:{port}...")
     serve(("localhost", port))
- 

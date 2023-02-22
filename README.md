@@ -7,7 +7,7 @@
 ## Testing
 
 ```shell
-$ python3 -m test
+$ python3 -m unittest
 ```
 
 ## Installation

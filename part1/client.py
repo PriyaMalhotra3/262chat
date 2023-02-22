@@ -35,9 +35,12 @@ class Session(AbstractSession):
         return self._queues.setdefault(name, asyncio.Queue())
 
     async def _consume(self):
-        while True:
-            payload = await self._receive()
-            await self._queue(payload[0]).put(payload)
+        try:
+            while True:
+                payload = await self._receive()
+                await self._queue(payload[0]).put(payload)
+        except asyncio.IncompleteReadError:
+            pass
 
     async def _initiate(self, command, username, password):
         await self._send(f"{command.upper()} {username}\0{password}")
@@ -82,5 +85,5 @@ class Session(AbstractSession):
             )
 
     async def close(self):
-        pass
-        # await self._writer.wait_closed()
+        self._writer.close()
+        await self._writer.wait_closed()

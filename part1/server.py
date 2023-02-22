@@ -67,7 +67,10 @@ class Session(socketserver.BaseRequestHandler):
         "Not thread-safe."
         terminator = self.transfer_buffer.find(0)
         while terminator < 0:
-            chunk = self.socket.recv(CHUNK_SIZE)
+            try:
+                chunk = self.socket.recv(CHUNK_SIZE)
+            except Exception:
+                raise SessionDeath
             if not chunk:
                 raise SessionDeath
             self.transfer_buffer.extend(chunk)

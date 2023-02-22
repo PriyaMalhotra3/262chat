@@ -1,6 +1,3 @@
-import os
-os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "false"
-
 import sys
 import unittest
 import asyncio
@@ -216,6 +213,15 @@ class TestAbstractSession:
             await bob.list_users(),
             ["Bob"]
         )
+
+    async def test_delete_reregister(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        await alice.delete()
+
+        alice_later = await self.connect()
+        await alice_later.register("Alice", "pass")
 
 class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

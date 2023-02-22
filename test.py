@@ -27,38 +27,77 @@ class TestAbstractSession:
             env=dict(os.environ, PORT=str(self.port))
         )
         await asyncio.sleep(1) # Wait for service to come up and open port.
-        self.session = await self.client.connect("localhost", self.port)
-        self.addAsyncCleanup(self.session.close)
 
     def tearDown(self):
         self.server_process.terminate
 
+    async def connect(self):
+        session = await self.client.connect("localhost", self.port)
+        self.addAsyncCleanup(session.close)
+        return session 
+
     async def test_register(self):
-        await self.session.register("Alice", "pass")
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+    async def test_register_empty(self):
+        client = await self.connect()
+        with self.assertRaisesRegex(Exception, r"empty"):
+            await client.register("", "pass")
+
+    async def test_register_invalid_name(self):
+        with self.assertRaisesRegex(Exception, r"must not contain whitespace"):
+            client = await self.connect()
+            await client.register("white space", "pass")
 
     async def test_register_collision(self):
-        await self.session.register("Alice", "pass")
-        await self.session.close()
-        self.session = await self.client.connect("localhost", self.port)
+        alice1 = await self.connect()
+        await alice1.register("Alice", "pass")
+
+        alice2 = await self.connect()
         with self.assertRaisesRegex(Exception, r"not available"):
-            await self.session.register("Alice", "pass")
+            await alice2.register("Alice", "pass")
 
     async def test_login(self):
-        await self.session.register("Alice", "pass")
-        await self.session.close()
-        self.session = await self.client.connect("localhost", self.port)
-        await self.session.login("Alice", "pass")
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+        await alice.close()
+
+        alice_later = await self.connect()
+        await alice_later.login("Alice", "pass")
 
     async def test_login_incorrect_password(self):
-        await self.session.register("Alice", "pass")
-        await self.session.close()
-        self.session = await self.client.connect("localhost", self.port)
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+        await alice.close()
+
+        someone_else = await self.connect()
         with self.assertRaisesRegex(Exception, r"Incorrect password"):
-            await self.session.login("Alice", "incorrect")
+            await someone_else.login("Alice", "incorrect")
 
     async def test_login_nonexistent(self):
+        alice = await self.connect()
         with self.assertRaisesRegex(Exception, r"Incorrect username"):
-            await self.session.login("Alice", "pass")
+            await alice.login("Alice", "pass")
+
+    async def test_username(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+        self.assertEqual(alice.username, "Alice")
+
+    @staticmethod
+    def users_set(usernames):
+        return set(username.split()[0] for username in usernames)
+
+    async def test_list_users(self):
+        alice = await self.connect()
+        await alice.register("Alice", "pass")
+
+        bob = await self.connect()
+        await bob.register("Bob", "otherpass")
+
+        self.assertSetEqual(self.users_set(await alice.list_users()), {"Alice", "Bob"})
+        self.assertSetEqual(self.users_set(await bob.list_users()),   {"Alice", "Bob"})
 
 class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -73,4 +112,8 @@ class TestPart2(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
         await super().asyncSetUp()
 
 if __name__ == "__main__":
-    unittest.main()
+    try:
+        unittest.main(verbosity=2)
+    except RuntimeError as e:
+        if e.args[0] != "Event loop is closed":
+            raise

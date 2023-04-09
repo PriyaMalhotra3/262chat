@@ -1,0 +1,1 @@
+../../part2/generated/chat_pb2.py

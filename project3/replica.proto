@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+import "chat.proto";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service Replica {
+  rpc Firehose (stream ReplicatedMessage) returns (stream ReplicatedMessage) {}
+  rpc UserUpdate (stream InitialRequest) returns (stream InitialRequest) {}
+
+  rpc Cluster (google.protobuf.Empty) returns (Peers) {}
+}
+
+message ReplicatedMessage {
+  Message message = 1;
+  string from = 2;
+  google.protobuf.Timestamp sent = 3;
+}
+
+message Peers {
+  repeated string peers = 1;
+}

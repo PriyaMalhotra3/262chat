@@ -1,14 +1,13 @@
 #/usr/bin/env python3
 
-import os
+import sys
 import asyncio
 import sqlite3
-import timezone
 from abc import ABC, abstractmethod
 from datetime import datetime
 from dataclasses import dataclass, field
-from contextlib import contextmanager, ExitStack
-from typing import Optional, Callable, Union
+from contextlib import contextmanager
+from typing import Optional, Callable, Union, Awaitable, Generic, TypeVar, Iterable, Any
 
 import grpc
 from google.protobuf.empty_pb2 import Empty
@@ -20,13 +19,16 @@ sqlite3.register_adapter(Timestamp, lambda timestamp: timestamp.ToJsonString())
 
 T = TypeVar("T")
 class Node(Generic[T]):
-    def __init__(value: T,
-                 next_: Optional[Node[T]]=None,
-                 prev: Optional[Node[T]]=None):
+    def __init__(self,
+                 value: T,
+                 next_: "LinkedList[T]"=None,
+                 prev: "LinkedList[T]"=None):
         self._value = value
-        if (self.next := next_):
+        self.next = next_
+        if self.next:
             self.next.prev = self
-        if (self.prev := prev):
+        self.prev = prev
+        if self.prev:
             self.prev.next = self
 
     @property
@@ -40,7 +42,7 @@ class Node(Generic[T]):
             self.next.prev = self.prev
 
     def __iter__(self) -> Iterable[T]:
-        current = self
+        current: "LinkedList[T]" = self
         while current:
             yield current.value
             current = current.next
@@ -57,9 +59,17 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
     def __init__(self,
                  database: str,
                  cluster: Optional[str]=None):
-        self.connection = sqlite3.connect(database)
+        self.cluster = cluster
+        self.database = database
+        self.peers: set[str] = set()
+        self.firehoses:    LinkedList[asyncio.Queue[replica_pb2.ReplicatedMessage]] = None
+        self.user_updates: LinkedList[asyncio.Queue[chat_pb2.InitialRequest]]       = None
+        self.clients: dict[str, asyncio.Queue[chat_pb2.ReceivedMessage]] = {}
+
+    async def __aenter__(self):
+        self.connection = sqlite3.connect(self.database)
         self.cursor = self.connection.cursor()
-        self.cursor.execte("PRAGMA foreign_keys = ON")
+        self.cursor.execute("PRAGMA foreign_keys = ON")
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS users(
             name TEXT PRIMARY KEY,
@@ -81,23 +91,15 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         ON messages (sent ASC)
         """)
 
-        self.peers: set[str] = set()
-        self.firehoses:    LinkedList[asyncio.Queue[replica_pb2.ReplicatedMessage]] = None
-        self.user_updates: LinkedList[asyncio.Queue[chat_pb2.InitialRequest]]       = None
-
-        stub = self.connect(cluster)
-        async def join_cluster():
-            """Joins the cluster of the first-connected peer."""
+        if self.cluster and self.cluster not in self.peers:
+            stub = replica_pb2_grpc.ReplicaStub(grpc.aio.insecure_channel(self.cluster))
             for peer in (await stub.Cluster(Empty())).peers:
                 self.connect(peer)
-        asyncio.create_task(join_cluster())
+            self.connect(self.cluster, stub)
 
-        self.clients: dict[str, asyncio.Queue[chat_pb2.ReceivedMessage]] = {}
-
-    def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
+    async def __aexit__(self, *exc):
         """Closes the database connection properly."""
         self.connection.close()
         return False
@@ -126,7 +128,7 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         time = Timestamp()
         time.FromJsonString(sent)
         try:
-            clients[to].put_nowait(chat_pb2.ReceivedMessage(
+            self.clients[to].put_nowait(chat_pb2.ReceivedMessage(
                 message=chat_pb2.Message(
                     username=from_,
                     text=text
@@ -152,14 +154,12 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         if update.create:
             self.cursor.execute(
                 "INSERT INTO users(name, password) VALUES(?, ?)",
-                name,
-                password
+                (update.user.name, update.user.password)
             )
         else:
             self.cursor.execute(
                 "DELETE FROM messages WHERE from=? OR to=?",
-                update.user.username,
-                update.user.username
+                (update.user.username, update.user.username)
             )
             self.cursor.execute(
                 "DELETE FROM users WHERE name=?",
@@ -170,18 +170,25 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
     @staticmethod
     def notify(subscribers: LinkedList[asyncio.Queue], payload):
         """Notifies all subscribers of the new payload."""
-        for queue in l:
+        if not subscribers:
+            return
+        for queue in subscribers:
             queue.put_nowait(payload)
 
     @contextmanager
     def peer(self, address: str):
         """Keeps peer in the known-peers list as long as the connection is unbroken."""
+        if address not in self.peers:
+            print("Replica connected: " + address)
         self.peers.add(address)
         try:
             yield address
+        except grpc.aio.AioRpcError as e:
+            print(e)
         finally:
             try:
                 self.peers.remove(address)
+                print("Replica disconnected: " + address)
             except KeyError:
                 # Peer already disconnected.
                 pass
@@ -193,16 +200,12 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
              outgoing: Node[asyncio.Queue],
              until: Callable[[], Any]=lambda: False):
         """Connects two bidirectional streams in a pub-sub topology."""
-        context = ExitStack()
-        context.push(self.peer(address))
-        context.push(outgoing)
-
         async def forward(outgoing):
-            with context:
+            with self.peer(peer), outgoing:
                 while not until():
                     yield await outgoing.value.get()
         async def backward(incoming):
-            with context:
+            with self.peer(peer), outgoing:
                 async for payload in incoming:
                     try:
                         destination(payload)
@@ -217,22 +220,26 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         if not isrpc:
             return forward(outgoing)
 
-    def connect(address: str):
+    def connect(self, address: str, stub: Optional[replica_pb2_grpc.ReplicaStub]=None):
         """Connects to both the Firehose and UserUpdate streams of the peer at the address."""
-        stub = replica_pb2_grpc.ReplicaStub(grpc.aio.insecure_channel(address))
+        if address in self.peers:
+            return
+        if not stub:
+            stub = replica_pb2_grpc.ReplicaStub(grpc.aio.insecure_channel(address))
+        self.firehoses = Node(asyncio.Queue(), self.firehoses)
         self.join(
             address,
             self.save,
             stub.Firehose,
-            self.firehoses := Node(asyncio.Queue(), self.firehoses)
+            self.firehoses
         )
+        self.user_updates = Node(asyncio.Queue(), self.user_updates)
         self.join(
             address,
             self.update_user,
             stub.UserUpdate,
-            self.user_updates := Node(asyncio.Queue(), self.user_updates)
+            self.user_updates
         )
-        return stub
 
     async def Firehose(self, request, context):
         """Accepts an incoming Firehose connection."""
@@ -250,11 +257,12 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
                 "from": from_,
                 "sent": time
             })
+        self.firehoses = Node(asyncio.Queue(), self.firehoses)
         async for payload in self.join(
             context.peer(),
             self.save,
             request,
-            self.firehoses := Node(asyncio.Queue(), self.firehoses),
+            self.firehoses,
             until=context.cancelled
         ):
             yield payload
@@ -272,11 +280,12 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
                     password=password
                 )
             )
-        async for payload self.join(
+        self.user_updates = Node(asyncio.Queue(), self.user_updates)
+        async for payload in self.join(
             context.peer(),
             self.update_user,
             request,
-            self.user_updates := Node(asyncio.Queue(), self.user_updates),
+            self.user_updates,
             until=context.cancelled
         ):
             yield payload
@@ -326,7 +335,9 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
                     sent=sent
                 )
         self.clients[request.user.username] = asyncio.Queue()
-        context.add_done_callback(lambda context: del self.clients[request.user.username])
+        def disconnect(context):
+            del self.clients[request.user.username]
+        context.add_done_callback(disconnect)
         while not context.cancelled():
             yield await self.clients[request.user.username].get()
 
@@ -371,39 +382,74 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         
 async def serve(chat_port: int,
                 replica_port: int,
-                servicer: ReplicatedChat):
-    with servicer:
+                servicer: ReplicatedChat,
+                timeout: Optional[float]=None):
+    async with servicer:
         chat = grpc.aio.server()
         replica = grpc.aio.server()
         replica_pb2_grpc.add_ReplicaServicer_to_server(servicer, replica)
         chat_pb2_grpc.add_ChatServicer_to_server(servicer, chat)
         replica.add_insecure_port(f"[::]:{replica_port}")
         chat.add_insecure_port(f"[::]:{chat_port}")
+
         await asyncio.gather(
             chat.start(),
             replica.start()
         )
         await asyncio.gather(
-            chat.wait_for_termination()
-            replica.wait_for_termination()
+            chat.wait_for_termination(timeout),
+            replica.wait_for_termination(timeout)
         )
 
 if __name__ == '__main__':
-    import sys
     from os import path
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 
-    from ip import local_ip
+    import sys
     import argparse
-    parser = argparse.ArgumentParser(
-        description="Replicated, persistent gRPC server for 262chat"
+    class Parser(argparse.ArgumentParser):
+        def error(self, message):
+            print("error: " + message, file=sys.stderr)
+            self.print_help()
+            sys.exit(2)
+    parser = Parser(
+        description="Replicated, persistent gRPC server for 262chat."
     )
-    parser.add_argument("chat_port", type=int)
-    parser.add_argument("replica_port", type=int)
-    parser.add_argument("database", type=str)
-    parser.add_argument("--cluster", type=str)
-    parser.add_argument("--self-destruct", type=int)
-    
+    parser.add_argument(
+        "chat_port",
+        type=int,
+        help="Which port to serve clients on."
+    )
+    parser.add_argument(
+        "replica_port",
+        type=int,
+        help="Which port to serve replicas (other servers) on."
+    )
+    parser.add_argument(
+        "database",
+        help="Filename of this servers local database.",
+        metavar="database.db"
+    )
+    parser.add_argument(
+        "--cluster",
+        help="Name of an already-running server in a cluster of replicas to which this server should join.",
+        metavar="IP:PORT"
+    )
+    parser.add_argument(
+        "--self-destruct",
+        type=float,
+        default=None,
+        help="For testing purposes: how many minutes to wait before killing self in order to test crash/failstop fault tolerance.",
+        metavar="MIN"
+    )
+    args = parser.parse_intermixed_args()
+
+    from ip import local_ip
     ip = local_ip()
-    print(f"Serving clients on {ip}:{chat_port} and replicas on {ip}:{replica_port}...")
-    asyncio.run(serve(chat_port, replica_port))
+    print(f"Serving clients on {ip}:{args.chat_port} and replicas on {ip}:{args.replica_port}...")
+    asyncio.run(serve(
+        args.chat_port,
+        args.replica_port,
+        ReplicatedChat(args.database, args.cluster),
+        timeout=args.self_destruct and args.self_destruct*60
+    ))

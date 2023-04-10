@@ -223,7 +223,7 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         if update.create:
             self.cursor.execute(
                 "INSERT INTO users(name, password) VALUES(?, ?)",
-                (update.user.name, update.user.password)
+                (update.user.username, update.user.password)
             )
         else:
             self.cursor.execute(

@@ -29,7 +29,7 @@ class TestAbstractSession:
         await asyncio.sleep(1) # Wait for service to come up and open port.
 
     def tearDown(self):
-        self.server_process.terminate
+        self.server_process.terminate()
 
     async def connect(self):
         session = await self.client.connect("localhost", self.port)
@@ -224,17 +224,31 @@ class TestAbstractSession:
         alice_later = await self.connect()
         await alice_later.register("Alice", "pass")
 
-class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        self.server = "./part1/server.py"
-        self.client = Part1Session
-        await super().asyncSetUp()
+# class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
+#     async def asyncSetUp(self):
+#         self.server = "./part1/server.py"
+#         self.client = Part1Session
+#         await super().asyncSetUp()
 
-class TestPart2(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
+# class TestPart2(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
+#     async def asyncSetUp(self):
+#         self.server = "./part2/server.py"
+#         self.client = Part2Session
+#         await super().asyncSetUp()
+
+class TestProject3(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.server = "./part2/server.py"
+        self.port = self.free_port()
+        replica_port = self.free_port()
+        self.server = "./project3/server.py"
         self.client = Part2Session
-        await super().asyncSetUp()
+        self.server_process = await asyncio.create_subprocess_exec(
+            sys.executable, (Path(__file__).parent / self.server).resolve(),
+            str(self.port), str(replica_port), ":memory:",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.sleep(1) # Wait for service to come up and open port.
 
 if __name__ == "__main__":
     try:

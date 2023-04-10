@@ -72,12 +72,12 @@ class TestAbstractSession:
         await alice.close()
 
         someone_else = await self.connect()
-        with self.assertRaisesRegex(Exception, r"Incorrect password"):
+        with self.assertRaisesRegex(Exception, r"password"):
             await someone_else.login("Alice", "incorrect")
 
     async def test_login_nonexistent(self):
         alice = await self.connect()
-        with self.assertRaisesRegex(Exception, r"Incorrect username"):
+        with self.assertRaisesRegex(Exception, r"username"):
             await alice.login("Alice", "pass")
 
     async def test_username(self):

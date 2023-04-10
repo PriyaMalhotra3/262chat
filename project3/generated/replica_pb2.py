@@ -12,16 +12,17 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from part2.generated import chat_pb2 as chat__pb2
+from . import chat_pb2 as chat__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rreplica.proto\x1a\nchat.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\"f\n\x11ReplicatedMessage\x12\x19\n\x07message\x18\x01 \x01(\x0b\x32\x08.Message\x12\x0c\n\x04\x66rom\x18\x02 \x01(\t\x12(\n\x04sent\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x16\n\x05Peers\x12\r\n\x05peers\x18\x01 \x03(\t2\xa6\x01\n\x07Replica\x12\x38\n\x08\x46irehose\x12\x12.ReplicatedMessage\x1a\x12.ReplicatedMessage\"\x00(\x01\x30\x01\x12\x34\n\nUserUpdate\x12\x0f.InitialRequest\x1a\x0f.InitialRequest\"\x00(\x01\x30\x01\x12+\n\x07\x43luster\x12\x16.google.protobuf.Empty\x1a\x06.Peers\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rreplica.proto\x1a\nchat.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\"f\n\x11ReplicatedMessage\x12\x19\n\x07message\x18\x01 \x01(\x0b\x32\x08.Message\x12\x0c\n\x04\x66rom\x18\x02 \x01(\t\x12(\n\x04sent\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"$\n\x04Peer\x12\x0b\n\x03new\x18\x01 \x01(\x08\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x01(\t\"\x16\n\x05Peers\x12\r\n\x05peers\x18\x01 \x03(\t2\x8b\x01\n\x07Replica\x12)\n\x08\x46irehose\x12\x05.Peer\x1a\x12.ReplicatedMessage\"\x00\x30\x01\x12(\n\nUserUpdate\x12\x05.Peer\x1a\x0f.InitialRequest\"\x00\x30\x01\x12+\n\x07\x43luster\x12\x16.google.protobuf.Empty\x1a\x06.Peers\"\x00\x62\x06proto3')
 
 
 
 _REPLICATEDMESSAGE = DESCRIPTOR.message_types_by_name['ReplicatedMessage']
+_PEER = DESCRIPTOR.message_types_by_name['Peer']
 _PEERS = DESCRIPTOR.message_types_by_name['Peers']
 ReplicatedMessage = _reflection.GeneratedProtocolMessageType('ReplicatedMessage', (_message.Message,), {
   'DESCRIPTOR' : _REPLICATEDMESSAGE,
@@ -29,6 +30,13 @@ ReplicatedMessage = _reflection.GeneratedProtocolMessageType('ReplicatedMessage'
   # @@protoc_insertion_point(class_scope:ReplicatedMessage)
   })
 _sym_db.RegisterMessage(ReplicatedMessage)
+
+Peer = _reflection.GeneratedProtocolMessageType('Peer', (_message.Message,), {
+  'DESCRIPTOR' : _PEER,
+  '__module__' : 'replica_pb2'
+  # @@protoc_insertion_point(class_scope:Peer)
+  })
+_sym_db.RegisterMessage(Peer)
 
 Peers = _reflection.GeneratedProtocolMessageType('Peers', (_message.Message,), {
   'DESCRIPTOR' : _PEERS,
@@ -43,8 +51,10 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   _REPLICATEDMESSAGE._serialized_start=91
   _REPLICATEDMESSAGE._serialized_end=193
-  _PEERS._serialized_start=195
-  _PEERS._serialized_end=217
-  _REPLICA._serialized_start=220
-  _REPLICA._serialized_end=386
+  _PEER._serialized_start=195
+  _PEER._serialized_end=231
+  _PEERS._serialized_start=233
+  _PEERS._serialized_end=255
+  _REPLICA._serialized_start=258
+  _REPLICA._serialized_end=397
 # @@protoc_insertion_point(module_scope)

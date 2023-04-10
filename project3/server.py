@@ -6,7 +6,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from datetime import datetime
 from dataclasses import dataclass, field
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from typing import Optional, Callable, Union, Awaitable, Generic, TypeVar, Iterable, Any
 
 import grpc
@@ -21,8 +21,8 @@ T = TypeVar("T")
 class Node(Generic[T]):
     def __init__(self,
                  value: T,
-                 next_: "LinkedList[T]"=None,
-                 prev: "LinkedList[T]"=None):
+                 next_: "Optional[Node[T]]"=None,
+                 prev: "Optional[Node[T]]"=None):
         self._value = value
         self.next = next_
         if self.next:
@@ -41,29 +41,52 @@ class Node(Generic[T]):
         if self.next:
             self.next.prev = self.prev
 
-    def __iter__(self) -> Iterable[T]:
-        current: "LinkedList[T]" = self
-        while current:
-            yield current.value
-            current = current.next
-
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         self.remove()
         return False
-LinkedList = Optional[Node[T]]
+class LinkedList(Generic[T]):
+    def __init__(self):
+        self.head: Node[Optional[T]] = Node(None)
+
+    def push(self, value: T) -> Node[T]:
+        return Node(value, self.head.next, self.head)
+
+    def __iter__(self) -> Iterable[T]:
+        current = self.head.next
+        while current:
+            yield current.value
+            current = current.next
+
+class Replica(replica_pb2_grpc.ReplicaStub):
+    def __init__(self, address: str):
+        self.address = address
+        self.channel = grpc.aio.insecure_channel(self.address)
+        super().__init__(self.channel)
+
+    async def __aenter__(self):
+        return self
+
+    async def close(self):
+        return await self.channel.close()
+
+    async def __aexit__(self, *exc):
+        await self.close()
+        return False
 
 class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaServicer):
     def __init__(self,
+                 identity: str,
                  database: str,
                  cluster: Optional[str]=None):
+        self.identity = identity
         self.cluster = cluster
         self.database = database
-        self.peers: set[str] = set()
-        self.firehoses:    LinkedList[asyncio.Queue[replica_pb2.ReplicatedMessage]] = None
-        self.user_updates: LinkedList[asyncio.Queue[chat_pb2.InitialRequest]]       = None
+        self.peers: dict[str, Replica] = {}
+        self.firehoses = LinkedList()
+        self.user_updates = LinkedList()
         self.clients: dict[str, asyncio.Queue[chat_pb2.ReceivedMessage]] = {}
 
     async def __aenter__(self):
@@ -91,25 +114,71 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         ON messages (sent ASC)
         """)
 
-        if self.cluster and self.cluster not in self.peers:
-            stub = replica_pb2_grpc.ReplicaStub(grpc.aio.insecure_channel(self.cluster))
-            for peer in (await stub.Cluster(Empty())).peers:
-                self.connect(peer)
-            self.connect(self.cluster, stub)
+        if self.cluster:
+            def outreach(address: str):
+                async def consume():
+                    async with self.peer(address) as stub:
+                        await asyncio.gather(
+                            self.subscribe(self.save, stub.Firehose),
+                            self.subscribe(self.update_user, stub.UserUpdate)
+                        )
+                asyncio.create_task(consume())
+            # await self.peer(self.cluster).__aenter__()
+            initial = self.peers[self.cluster] = Replica(self.cluster)
+            for peer in (await initial.Cluster(Empty())).peers:
+                outreach(peer)
+            outreach(self.cluster)
 
         return self
 
     async def __aexit__(self, *exc):
-        """Closes the database connection properly."""
+        """Closes connections properly."""
+        for peer in self.peers.values():
+            await peer.close()
         self.connection.close()
         return False
 
     ### Peer-side:
 
+    async def subscribe(self,
+                        subscriber: Callable,
+                        publisher: grpc.aio.UnaryStreamMultiCallable,
+                        new: bool=True):
+        async for payload in publisher(replica_pb2.Peer(
+                new=new,
+                address=self.identity
+        )):
+            try:
+                subscriber(payload)
+            except sqlite3.IntegrityError:
+                # UNIQUE constraint violated, we must have already received the message.
+                pass
+
+    @asynccontextmanager
+    async def peer(self, address: str):
+        """Keeps peer in the known-peers list as long as the connection is unbroken."""
+        try:
+            peer = self.peers[address]
+        except KeyError:
+            print("Replica connected: " + address)
+            peer = self.peers[address] = Replica(address)
+        try:
+            async with peer:
+                yield peer
+        except grpc.aio.AioRpcError as e:
+            print(e.details())
+        finally:
+            try:
+                del self.peers[address]
+                print("Replica disconnected: " + address)
+            except KeyError:
+                # Replica already disconnected.
+                pass
+
     async def Cluster(self, request, context):
         """Reports addresses of known peers in this cluster."""
         return replica_pb2.Peers(
-            peers=self.peers
+            peers=self.peers.keys()
         )
 
     def message(self, from_: str, to: str, text: str, sent=None):
@@ -167,83 +236,10 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
             )
         self.connection.commit()
 
-    @staticmethod
-    def notify(subscribers: LinkedList[asyncio.Queue], payload):
-        """Notifies all subscribers of the new payload."""
-        if not subscribers:
-            return
-        for queue in subscribers:
-            queue.put_nowait(payload)
-
-    @contextmanager
-    def peer(self, address: str):
-        """Keeps peer in the known-peers list as long as the connection is unbroken."""
-        if address not in self.peers:
-            print("Replica connected: " + address)
-        self.peers.add(address)
-        try:
-            yield address
-        except grpc.aio.AioRpcError as e:
-            print(e)
-        finally:
-            try:
-                self.peers.remove(address)
-                print("Replica disconnected: " + address)
-            except KeyError:
-                # Peer already disconnected.
-                pass
-
-    def join(self,
-             peer: str,
-             destination: Callable,
-             incoming: Union["RequestType", grpc.aio.StreamStreamMultiCallable],
-             outgoing: Node[asyncio.Queue],
-             until: Callable[[], Any]=lambda: False):
-        """Connects two bidirectional streams in a pub-sub topology."""
-        async def forward(outgoing):
-            with self.peer(peer), outgoing:
-                while not until():
-                    yield await outgoing.value.get()
-        async def backward(incoming):
-            with self.peer(peer), outgoing:
-                async for payload in incoming:
-                    try:
-                        destination(payload)
-                    except sqlite3.IntegrityError:
-                        # UNIQUE constraint violated, we must have already received the message.
-                        pass
-
-        isrpc = isinstance(incoming, grpc.aio.StreamStreamMultiCallable)
-        if isrpc:
-            incoming = incoming(forward(outgoing))
-        asyncio.create_task(backward(incoming))
-        if not isrpc:
-            return forward(outgoing)
-
-    def connect(self, address: str, stub: Optional[replica_pb2_grpc.ReplicaStub]=None):
-        """Connects to both the Firehose and UserUpdate streams of the peer at the address."""
-        if address in self.peers:
-            return
-        if not stub:
-            stub = replica_pb2_grpc.ReplicaStub(grpc.aio.insecure_channel(address))
-        self.firehoses = Node(asyncio.Queue(), self.firehoses)
-        self.join(
-            address,
-            self.save,
-            stub.Firehose,
-            self.firehoses
-        )
-        self.user_updates = Node(asyncio.Queue(), self.user_updates)
-        self.join(
-            address,
-            self.update_user,
-            stub.UserUpdate,
-            self.user_updates
-        )
-
     async def Firehose(self, request, context):
         """Accepts an incoming Firehose connection."""
         # Re-sync tables:
+        print("AAAAAAA")
         for from_, to, text, sent in self.cursor.execute(
                 "SELECT 'from', 'to', text, sent FROM messages ORDER BY sent ASC"
         ):
@@ -257,19 +253,20 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
                 "from": from_,
                 "sent": time
             })
-        self.firehoses = Node(asyncio.Queue(), self.firehoses)
-        async for payload in self.join(
-            context.peer(),
-            self.save,
-            request,
-            self.firehoses,
-            until=context.cancelled
-        ):
-            yield payload
+        if request.new:
+            async def consume():
+                async with self.peer(request.address) as stub:
+                    await self.subscribe(self.save, stub.Firehose, new=False)
+            asyncio.create_task(consume())
+        async with self.peer(request.address) as stub:
+            with self.firehoses.push(asyncio.Queue()) as queue:
+                while not context.cancelled():
+                    yield await queue.value.get()
 
     async def UserUpdate(self, request, context):
         """Accepts and incoming UserUpdate connection."""
         # Re-sync tables:
+        print("BBBBBBBB")
         for name, password in self.cursor.execute(
                 "SELECT name, password FROM users"
         ):
@@ -280,17 +277,23 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
                     password=password
                 )
             )
-        self.user_updates = Node(asyncio.Queue(), self.user_updates)
-        async for payload in self.join(
-            context.peer(),
-            self.update_user,
-            request,
-            self.user_updates,
-            until=context.cancelled
-        ):
-            yield payload
+        if request.new:
+            async def consume():
+                async with self.peer(request.address) as stub:
+                    await self.subscribe(self.update_user, stub.UserUpdate, new=False)
+            asyncio.create_task(consume())
+        async with self.peer(request.address) as stub:
+            with self.user_updates.push(asyncio.Queue()) as queue:
+                while not context.cancelled():
+                    yield await queue.value.get()
 
     ### Client-side:
+
+    @staticmethod
+    def notify(subscribers: LinkedList[asyncio.Queue], payload):
+        """Notifies all subscribers of the new payload."""
+        for queue in subscribers:
+            queue.put_nowait(payload)
 
     async def authenticate(self, user, context):
         """Aborts the RPC if authentication fails."""
@@ -446,10 +449,11 @@ if __name__ == '__main__':
 
     from ip import local_ip
     ip = local_ip()
-    print(f"Serving clients on {ip}:{args.chat_port} and replicas on {ip}:{args.replica_port}...")
+    identity = f"{ip}:{args.replica_port}"
+    print(f"Serving clients on {ip}:{args.chat_port} and replicas on {identity}...")
     asyncio.run(serve(
         args.chat_port,
         args.replica_port,
-        ReplicatedChat(args.database, args.cluster),
+        ReplicatedChat(identity, args.database, args.cluster),
         timeout=args.self_destruct and args.self_destruct*60
     ))

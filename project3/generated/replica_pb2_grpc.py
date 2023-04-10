@@ -2,8 +2,8 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from . import chat_pb2 as chat__pb2, replica_pb2 as replica__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from . import chat_pb2 as chat__pb2, replica_pb2 as replica__pb2
 
 
 class ReplicaStub(object):
@@ -15,14 +15,14 @@ class ReplicaStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Firehose = channel.stream_stream(
+        self.Firehose = channel.unary_stream(
                 '/Replica/Firehose',
-                request_serializer=replica__pb2.ReplicatedMessage.SerializeToString,
+                request_serializer=replica__pb2.Peer.SerializeToString,
                 response_deserializer=replica__pb2.ReplicatedMessage.FromString,
                 )
-        self.UserUpdate = channel.stream_stream(
+        self.UserUpdate = channel.unary_stream(
                 '/Replica/UserUpdate',
-                request_serializer=chat__pb2.InitialRequest.SerializeToString,
+                request_serializer=replica__pb2.Peer.SerializeToString,
                 response_deserializer=chat__pb2.InitialRequest.FromString,
                 )
         self.Cluster = channel.unary_unary(
@@ -35,13 +35,13 @@ class ReplicaStub(object):
 class ReplicaServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Firehose(self, request_iterator, context):
+    def Firehose(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UserUpdate(self, request_iterator, context):
+    def UserUpdate(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -56,14 +56,14 @@ class ReplicaServicer(object):
 
 def add_ReplicaServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Firehose': grpc.stream_stream_rpc_method_handler(
+            'Firehose': grpc.unary_stream_rpc_method_handler(
                     servicer.Firehose,
-                    request_deserializer=replica__pb2.ReplicatedMessage.FromString,
+                    request_deserializer=replica__pb2.Peer.FromString,
                     response_serializer=replica__pb2.ReplicatedMessage.SerializeToString,
             ),
-            'UserUpdate': grpc.stream_stream_rpc_method_handler(
+            'UserUpdate': grpc.unary_stream_rpc_method_handler(
                     servicer.UserUpdate,
-                    request_deserializer=chat__pb2.InitialRequest.FromString,
+                    request_deserializer=replica__pb2.Peer.FromString,
                     response_serializer=chat__pb2.InitialRequest.SerializeToString,
             ),
             'Cluster': grpc.unary_unary_rpc_method_handler(
@@ -82,7 +82,7 @@ class Replica(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Firehose(request_iterator,
+    def Firehose(request,
             target,
             options=(),
             channel_credentials=None,
@@ -92,14 +92,14 @@ class Replica(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/Replica/Firehose',
-            replica__pb2.ReplicatedMessage.SerializeToString,
+        return grpc.experimental.unary_stream(request, target, '/Replica/Firehose',
+            replica__pb2.Peer.SerializeToString,
             replica__pb2.ReplicatedMessage.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def UserUpdate(request_iterator,
+    def UserUpdate(request,
             target,
             options=(),
             channel_credentials=None,
@@ -109,8 +109,8 @@ class Replica(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/Replica/UserUpdate',
-            chat__pb2.InitialRequest.SerializeToString,
+        return grpc.experimental.unary_stream(request, target, '/Replica/UserUpdate',
+            replica__pb2.Peer.SerializeToString,
             chat__pb2.InitialRequest.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

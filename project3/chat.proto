@@ -1,1 +1,50 @@
-../part2/chat.proto
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service Chat {
+  rpc Initiate (InitialRequest) returns (stream ReceivedMessage) {}
+
+  rpc SendMessage (SentMessage) returns (google.protobuf.Empty) {}
+  rpc DeleteAccount (Authentication) returns (google.protobuf.Empty) {}
+
+  rpc ListUsers (Filter) returns (Users) {}
+}
+
+message Message {
+  string username = 1;
+  string text = 2;
+}
+
+// ---------- Requests ----------
+
+message Authentication {
+  string username = 1;
+  string password = 2;
+}
+
+message InitialRequest {
+  bool create = 1;
+  Authentication user = 2;
+}
+
+message SentMessage {
+  Message message = 1;
+  Authentication user = 2;
+}
+
+message Filter {
+  string glob = 1;
+}
+
+// ---------- Responses ----------
+
+message Users {
+  repeated string usernames = 1;
+}
+
+message ReceivedMessage {
+  Message message = 1;
+  google.protobuf.Timestamp sent = 2;
+}

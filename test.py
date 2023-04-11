@@ -224,17 +224,17 @@ class TestAbstractSession:
         alice_later = await self.connect()
         await alice_later.register("Alice", "pass")
 
-# class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
-#     async def asyncSetUp(self):
-#         self.server = "./part1/server.py"
-#         self.client = Part1Session
-#         await super().asyncSetUp()
+class TestPart1(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.server = "./part1/server.py"
+        self.client = Part1Session
+        await super().asyncSetUp()
 
-# class TestPart2(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
-#     async def asyncSetUp(self):
-#         self.server = "./part2/server.py"
-#         self.client = Part2Session
-#         await super().asyncSetUp()
+class TestPart2(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.server = "./part2/server.py"
+        self.client = Part2Session
+        await super().asyncSetUp()
 
 class TestProject3(TestAbstractSession, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

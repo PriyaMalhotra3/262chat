@@ -284,7 +284,7 @@ class App(CTk):
     def __init__(self):
         super().__init__()
 
-        self.geometry("400x300")
+        self.geometry("600x600")
         self.title("262chat")
 
         CTkLabel(

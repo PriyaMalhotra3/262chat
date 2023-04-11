@@ -3,9 +3,7 @@
 import sys
 import asyncio
 import sqlite3
-from abc import ABC, abstractmethod
-from datetime import datetime
-from dataclasses import dataclass, field
+import traceback
 from contextlib import asynccontextmanager
 from typing import Optional, Callable, Union, Awaitable, Generic, TypeVar, Iterable, Any
 
@@ -207,12 +205,12 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         except KeyError:
             # Recipient must be on different server or offline and will get message from transcript on logon.
             pass
-        return sent
+        return time
 
     def save(self, message: replica_pb2.ReplicatedMessage):
         """Saves a ReplicatedMessage to the database."""
         self.message(
-            getattr(message, "from"),
+            message.from_,
             message.message.username,
             message.message.text,
             message.sent
@@ -239,20 +237,19 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
     async def Firehose(self, request, context):
         """Accepts an incoming Firehose connection."""
         # Re-sync tables:
-        print("AAAAAAA")
         for from_, to, text, sent in self.cursor.execute(
-                "SELECT 'from', 'to', text, sent FROM messages ORDER BY sent ASC"
+                "SELECT [from], [to], text, sent FROM messages ORDER BY sent ASC"
         ):
             time = Timestamp()
             time.FromJsonString(sent)
-            yield replica_pb2.ReplicatedMessage(**{
-                "message": chat_pb2.Message(
+            yield replica_pb2.ReplicatedMessage(
+                message=chat_pb2.Message(
                     username=to,
                     text=text
                 ),
-                "from": from_,
-                "sent": time
-            })
+                from_=from_,
+                sent=time
+            )
         if request.new:
             async def consume():
                 async with self.peer(request.address) as stub:
@@ -266,7 +263,6 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
     async def UserUpdate(self, request, context):
         """Accepts and incoming UserUpdate connection."""
         # Re-sync tables:
-        print("BBBBBBBB")
         for name, password in self.cursor.execute(
                 "SELECT name, password FROM users"
         ):
@@ -299,8 +295,7 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
         """Aborts the RPC if authentication fails."""
         if not self.cursor.execute(
             "SELECT EXISTS(SELECT 1 FROM users WHERE name=? AND password=?)",
-            user.username,
-            user.password
+            (user.username, user.password)
         ).fetchone():
             await context.abort(
                 grpc.StatusCode.INVALID_ARGUMENT,
@@ -324,18 +319,19 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
             # Replay persisted messages:
             for username, text, sent in self.cursor.execute(
                     """
-                    SELECT 'from', text, sent FROM messages WHERE 'to'=? OR 'from'=?
+                    SELECT [from], text, sent FROM messages WHERE [to]=? OR [from]=?
                     ORDER BY sent ASC
                     """,
-                    request.user.username,
-                    request.user.username
+                    (request.user.username, request.user.username)
             ):
+                time = Timestamp()
+                time.FromJsonString(sent)
                 yield chat_pb2.ReceivedMessage(
                     message=chat_pb2.Message(
                         username=username,
                         text=text
                     ),
-                    sent=sent
+                    sent=time
                 )
         self.clients[request.user.username] = asyncio.Queue()
         def disconnect(context):
@@ -354,11 +350,11 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
             text=request.message.text
         )
         # Notify peers of new message:
-        self.notify(self.firehoses, replica_pb2.ReplicatedMessage(**{
-            "from": request.user.username,
-            "message": request.message,
-            "sent": sent
-        }))
+        self.notify(self.firehoses, replica_pb2.ReplicatedMessage(
+            from_=request.user.username,
+            message=request.message,
+            sent=sent
+        ))
         return Empty()
 
     async def DeleteAccount(self, request, context):
@@ -377,10 +373,10 @@ class ReplicatedChat(chat_pb2_grpc.ChatServicer, replica_pb2_grpc.ReplicaService
     async def ListUsers(self, request, context):
         """Returns list of all registered users."""
         return chat_pb2.Users(
-            usernames=self.cursor.execute(
+            usernames=(row[0] for row in self.cursor.execute(
                 "SELECT name FROM users WHERE name GLOB ?",
-                request.glob
-            )
+                (request.glob,)
+            ))
         )
         
 async def serve(chat_port: int,

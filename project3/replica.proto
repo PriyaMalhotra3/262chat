@@ -14,7 +14,7 @@ service Replica {
 
 message ReplicatedMessage {
   Message message = 1;
-  string from = 2;
+  string from_ = 2;
   google.protobuf.Timestamp sent = 3;
 }
 
